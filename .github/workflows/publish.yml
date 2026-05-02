@@ -1,11 +1,13 @@
 name: Publish
 
-# description: Publish package to loash-industries github npm repo
+# description: Validate, release and publish to npm via semantic-release
 permissions:
   id-token: write
   contents: write
   actions: read
   checks: write
+  issues: write
+  pull-requests: write
 
 on:
   push:
@@ -21,19 +23,14 @@ jobs:
       npm_client: yarn
       npm_client_production_flag: --frozen-lockfile
 
-  create-tag:
-    uses: loash-industries/public-workflows/.github/workflows/js-create-release-tag.yml@v0.1.0
+  release:
+    uses: loash-industries/public-workflows/.github/workflows/js-semantic-release.yml@main
     needs: [ validate-code ]
     with:
-      package_json_path: package.json
-      add_v_prefix_to_version: 'false'
-
-  publish:
-    uses: loash-industries/public-workflows/.github/workflows/js-publish-npm.yml@v0.1.0
-    needs: [ create-tag ]
-    with:
-      node_version: 22
+      node_version: "22"
       environment: prd
       npm_client: yarn
+      npm_client_production_flag: --frozen-lockfile
     secrets:
-      TRINARYEX_NPM_TOKEN: ${{ secrets.TRINARYEX_NPM_TOKEN }}
+      GH_AUTH_TOKEN: ${{ secrets.GH_AUTH_TOKEN }}
+      NPM_TOKEN: ${{ secrets.TRINARYEX_NPM_TOKEN }}
