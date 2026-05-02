@@ -36,4 +36,4 @@ jobs:
       environment: prd
       npm_client: yarn
     secrets:
-      NPM_TOKEN: ${{ secrets.TRINARYEX_NPM_TOKEN }}
+      TRINARYEX_NPM_TOKEN: ${{ secrets.TRINARYEX_NPM_TOKEN }}
