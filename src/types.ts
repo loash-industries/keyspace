@@ -1,76 +1,76 @@
-import type { Transaction } from '@mysten/sui/transactions';
+import type { Transaction } from '@mysten/sui/transactions'
 
 // ── Role ─────────────────────────────────────────────────────────────────────
 
 export type Role =
   | { type: 'address'; address: string }
-  | { type: 'tribe'; tribeId: string };
+  | { type: 'tribe'; tribeId: string }
 
 // ── ACL state ─────────────────────────────────────────────────────────────────
 
 export interface AclMeta {
-  id: string;
-  owner: string;
-  name: string;
-  epoch: number;
-  entryCount: number;
+  id: string
+  owner: string
+  name: string
+  epoch: number
+  entryCount: number
 }
 
 export interface AclDetail extends AclMeta {
-  roles: Role[];
-  entries: EntryMeta[];
+  roles: Role[]
+  entries: EntryMeta[]
 }
 
 export interface EntryMeta {
-  id: string;
-  aclId: string;
-  location: string;
-  description: string;
-  createdBy: string;
-  epoch: number;
-  isStale: boolean;
+  id: string
+  aclId: string
+  location: string
+  description: string
+  createdBy: string
+  epoch: number
+  isStale: boolean
 }
 
 export interface AdminCap {
-  id: string;
-  aclId: string;
+  id: string
+  aclId: string
 }
 
 // ── Operation results ─────────────────────────────────────────────────────────
 
 export interface CreateAclResult {
-  aclId: string;
-  adminCapId: string;
-  epoch: number;
+  aclId: string
+  adminCapId: string
+  epoch: number
 }
 
 export interface WriteResult {
-  entryId: string;
-  location: string;
-  epoch: number;
+  entryId: string
+  location: string
+  epoch: number
 }
 
 export interface RotateResult {
-  newLocation: string;
-  epoch: number;
+  newLocation: string
+  epoch: number
 }
 
 export interface RotateAllResult {
-  rotated: number;
-  skipped: number;
+  rotated: number
+  skipped: number
 }
 
 // ── Executor ──────────────────────────────────────────────────────────────────
 
 export interface ObjectChange {
-  type: string;
-  objectId: string;
-  objectType: string;
+  type: string
+  objectId: string
+  objectType: string
 }
 
 export interface ExecuteResult {
-  digest: string;
-  objectChanges?: ObjectChange[];
+  digest: string
+  objectChanges?: ObjectChange[]
 }
 
 /**
@@ -85,7 +85,7 @@ export interface ExecuteResult {
  *     return result;
  *   }
  */
-export type TransactionExecutor = (tx: Transaction) => Promise<ExecuteResult>;
+export type TransactionExecutor = (tx: Transaction) => Promise<ExecuteResult>
 
 // ── Signing ───────────────────────────────────────────────────────────────────
 
@@ -98,13 +98,13 @@ export type TransactionExecutor = (tx: Transaction) => Promise<ExecuteResult>;
  *     dappKitSignFn({ message }, { onSuccess: r => resolve(r.signature), onError: reject })
  *   )
  */
-export type SignPersonalMessageFn = (message: Uint8Array) => Promise<string>;
+export type SignPersonalMessageFn = (message: Uint8Array) => Promise<string>
 
 // ── Storage ───────────────────────────────────────────────────────────────────
 
 export interface StorageAdapter {
-  upload(data: Uint8Array): Promise<string>;   // returns location (ipfs://... or https://...)
-  download(location: string): Promise<Uint8Array>;
+  upload(data: Uint8Array): Promise<string> // returns location (ipfs://... or https://...)
+  download(location: string): Promise<Uint8Array>
 }
 
 // ── Client config ─────────────────────────────────────────────────────────────
@@ -112,18 +112,18 @@ export interface StorageAdapter {
 export interface AclClientConfig {
   /** @mysten/sui SuiClient instance */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  suiClient: any;
+  suiClient: any
   /** @mysten/seal SealClient instance (pre-configured with key servers) */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  sealClient: any;
+  sealClient: any
   /** Deployed Move package ID */
-  packageId: string;
+  packageId: string
   /** Signs and submits PTBs; must return objectChanges for mutation methods */
-  executor: TransactionExecutor;
+  executor: TransactionExecutor
   /** Encrypted blob storage backend */
-  storageAdapter: StorageAdapter;
+  storageAdapter: StorageAdapter
   /** REST indexer URL for getAccessibleAcls — optional */
-  indexerUrl?: string;
+  indexerUrl?: string
   /** Seal session key TTL in minutes (default: 10) */
-  sessionKeyTtlMin?: number;
+  sessionKeyTtlMin?: number
 }

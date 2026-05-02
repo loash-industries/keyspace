@@ -1,18 +1,21 @@
-import { Transaction } from '@mysten/sui/transactions';
-import type { Role } from './types';
-import { AclClientError, AclError } from './errors';
+import { Transaction } from '@mysten/sui/transactions'
+import type { Role } from './types'
+import { AclClientError, AclError } from './errors'
 
 function textBytes(s: string): number[] {
-  return Array.from(new TextEncoder().encode(s));
+  return Array.from(new TextEncoder().encode(s))
 }
 
-export function createAllowlistTx(packageId: string, name: string): Transaction {
-  const tx = new Transaction();
+export function createAllowlistTx(
+  packageId: string,
+  name: string,
+): Transaction {
+  const tx = new Transaction()
   tx.moveCall({
     target: `${packageId}::acl_encrypt::create_allowlist`,
     arguments: [tx.pure.vector('u8', textBytes(name))],
-  });
-  return tx;
+  })
+  return tx
 }
 
 export function addMemberTx(
@@ -21,12 +24,16 @@ export function addMemberTx(
   capId: string,
   grantee: string,
 ): Transaction {
-  const tx = new Transaction();
+  const tx = new Transaction()
   tx.moveCall({
     target: `${packageId}::acl_encrypt::add`,
-    arguments: [tx.object(allowlistId), tx.object(capId), tx.pure.address(grantee)],
-  });
-  return tx;
+    arguments: [
+      tx.object(allowlistId),
+      tx.object(capId),
+      tx.pure.address(grantee),
+    ],
+  })
+  return tx
 }
 
 export function removeMemberTx(
@@ -35,12 +42,16 @@ export function removeMemberTx(
   capId: string,
   grantee: string,
 ): Transaction {
-  const tx = new Transaction();
+  const tx = new Transaction()
   tx.moveCall({
     target: `${packageId}::acl_encrypt::remove`,
-    arguments: [tx.object(allowlistId), tx.object(capId), tx.pure.address(grantee)],
-  });
-  return tx;
+    arguments: [
+      tx.object(allowlistId),
+      tx.object(capId),
+      tx.pure.address(grantee),
+    ],
+  })
+  return tx
 }
 
 export function publishEntryTx(
@@ -49,7 +60,7 @@ export function publishEntryTx(
   location: string,
   description: string,
 ): Transaction {
-  const tx = new Transaction();
+  const tx = new Transaction()
   tx.moveCall({
     target: `${packageId}::acl_encrypt::publish_entry`,
     arguments: [
@@ -57,8 +68,8 @@ export function publishEntryTx(
       tx.pure.vector('u8', textBytes(location)),
       tx.pure.vector('u8', textBytes(description)),
     ],
-  });
-  return tx;
+  })
+  return tx
 }
 
 export function updateEntryTx(
@@ -67,7 +78,7 @@ export function updateEntryTx(
   entryId: string,
   newLocation: string,
 ): Transaction {
-  const tx = new Transaction();
+  const tx = new Transaction()
   tx.moveCall({
     target: `${packageId}::acl_encrypt::update_entry`,
     arguments: [
@@ -75,8 +86,8 @@ export function updateEntryTx(
       tx.object(entryId),
       tx.pure.vector('u8', textBytes(newLocation)),
     ],
-  });
-  return tx;
+  })
+  return tx
 }
 
 export function editEntryTx(
@@ -85,7 +96,7 @@ export function editEntryTx(
   entryId: string,
   newLocation: string,
 ): Transaction {
-  const tx = new Transaction();
+  const tx = new Transaction()
   tx.moveCall({
     target: `${packageId}::acl_encrypt::edit_entry`,
     arguments: [
@@ -93,26 +104,26 @@ export function editEntryTx(
       tx.object(entryId),
       tx.pure.vector('u8', textBytes(newLocation)),
     ],
-  });
-  return tx;
+  })
+  return tx
 }
 
 export function transferAdminCapTx(
   capId: string,
   newOwner: string,
 ): Transaction {
-  const tx = new Transaction();
-  tx.transferObjects([tx.object(capId)], tx.pure.address(newOwner));
-  return tx;
+  const tx = new Transaction()
+  tx.transferObjects([tx.object(capId)], tx.pure.address(newOwner))
+  return tx
 }
 
 /**
  * Extract the address from an `address` role. Throws for unsupported role types.
  */
 export function roleToAddress(role: Role): string {
-  if (role.type === 'address') return role.address;
+  if (role.type === 'address') return role.address
   throw new AclClientError(
     AclError.NotImplemented,
     `Role type '${role.type}' requires a contract upgrade (tribe roles are not yet supported)`,
-  );
+  )
 }
