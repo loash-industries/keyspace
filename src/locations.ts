@@ -1,6 +1,6 @@
-import type { AclClient } from './AclClient'
-import type { SignPersonalMessageFn, WriteResult, RotateResult } from './types'
-import { AclClientError, AclError } from './errors'
+import type { AclClient } from './AclClient.js'
+import type { SignPersonalMessageFn, WriteResult, RotateResult } from './types.js'
+import { AclClientError, AclError } from './errors.js'
 
 // ── Location schema ───────────────────────────────────────────────────────────
 

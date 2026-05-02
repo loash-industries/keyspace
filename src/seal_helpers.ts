@@ -1,7 +1,7 @@
 import { SessionKey, EncryptedObject } from '@mysten/seal'
 import { Transaction } from '@mysten/sui/transactions'
 import { fromHex, toHex } from '@mysten/sui/utils'
-import type { SignPersonalMessageFn } from './types'
+import type { SignPersonalMessageFn } from './types.js'
 
 const SESSION_TTL_MIN = 10
 

@@ -10,8 +10,8 @@ import type {
   RotateResult,
   SignPersonalMessageFn,
   WriteResult,
-} from './types'
-import { AclClientError, AclError } from './errors'
+} from './types.js'
+import { AclClientError, AclError } from './errors.js'
 import {
   addMemberTx,
   editEntryTx,
@@ -20,15 +20,15 @@ import {
   roleToAddress,
   transferAdminCapTx,
   updateEntryTx,
-} from './transactions'
+} from './transactions.js'
 import {
   fetchAccessibleAcls,
   fetchAdminCaps,
   fetchAllowListDetail,
   fetchAllowListMeta,
   fetchEncryptedEntry,
-} from './queries'
-import { sealDecrypt, sealEncrypt } from './seal_helpers'
+} from './queries.js'
+import { sealDecrypt, sealEncrypt } from './seal_helpers.js'
 
 export class AclClient {
   private readonly suiClient: AclClientConfig['suiClient']

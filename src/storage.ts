@@ -1,5 +1,5 @@
-import type { StorageAdapter } from './types'
-import { AclClientError, AclError } from './errors'
+import type { StorageAdapter } from './types.js'
+import { AclClientError, AclError } from './errors.js'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

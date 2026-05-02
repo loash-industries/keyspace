@@ -1,5 +1,5 @@
-import type { AdminCap, AclDetail, AclMeta, EntryMeta, Role } from './types'
-import { AclClientError, AclError } from './errors'
+import type { AdminCap, AclDetail, AclMeta, EntryMeta, Role } from './types.js'
+import { AclClientError, AclError } from './errors.js'
 
 // ── Raw field shapes returned by Sui RPC ──────────────────────────────────────
 

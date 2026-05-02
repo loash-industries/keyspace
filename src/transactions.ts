@@ -1,6 +1,6 @@
 import { Transaction } from '@mysten/sui/transactions'
-import type { Role } from './types'
-import { AclClientError, AclError } from './errors'
+import type { Role } from './types.js'
+import { AclClientError, AclError } from './errors.js'
 
 function textBytes(s: string): number[] {
   return Array.from(new TextEncoder().encode(s))

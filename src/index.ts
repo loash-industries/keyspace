@@ -1,17 +1,17 @@
-export { AclClient } from './AclClient'
-export { AclError, AclClientError } from './errors'
+export { AclClient } from './AclClient.js'
+export { AclError, AclClientError } from './errors.js'
 export {
   PinataStorageAdapter,
   ObjectStoreStorageAdapter,
   S3ObjectStoreClient,
   getDownloadUrl,
-} from './storage'
-export { clearSessionCache } from './seal_helpers'
+} from './storage.js'
+export { clearSessionCache } from './seal_helpers.js'
 export {
   LocationsClient,
   LOCATIONS_SCHEMA_NAME,
   LOCATIONS_SCHEMA_VERSION,
-} from './locations'
+} from './locations.js'
 export type {
   Role,
   AclMeta,
@@ -28,15 +28,15 @@ export type {
   ExecuteResult,
   ObjectChange,
   AclClientConfig,
-} from './types'
+} from './types.js'
 export type {
   PinataStorageConfig,
   ObjectStoreClient,
   ObjectStoreStorageConfig,
   S3ObjectStoreClientConfig,
-} from './storage'
+} from './storage.js'
 export type {
   Location,
   LocationsDocument,
   LocationsClientConfig,
-} from './locations'
+} from './locations.js'
