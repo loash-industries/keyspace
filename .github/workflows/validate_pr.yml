@@ -4,12 +4,8 @@ on: pull_request
 
 jobs:
   validate-code:
-    uses: loash-industries/workflows/.github/workflows/js-validate-code.yml@v0.3.4
+    uses: loash-industries/public-workflows/.github/workflows/js-validate-code.yml@v0.1.0
     with:
       node_version: 22
       npm_client: yarn
       npm_client_production_flag: --frozen-lockfile
-      yarn_version: 1
-      npm_registry_name: npm
-    secrets:
-      GH_AUTH_TOKEN: ${{ secrets.GH_AUTH_TOKEN }}

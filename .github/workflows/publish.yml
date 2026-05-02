@@ -15,32 +15,25 @@ on:
 jobs:
   validate-code:
     if: github.actor != 'github-actions[bot]'
-    uses: loash-industries/workflows/.github/workflows/js-validate-code.yml@v0.3.6
+    uses: loash-industries/public-workflows/.github/workflows/js-validate-code.yml@v0.1.0
     with:
       node_version: 22
       npm_client: yarn
       npm_client_production_flag: --frozen-lockfile
-      yarn_version: 1
-      npm_registry_name: npm
-    secrets:
-      GH_AUTH_TOKEN: ${{ secrets.GH_AUTH_TOKEN }}
 
   create-tag:
-    uses: loash-industries/workflows/.github/workflows/js-create-release-tag.yml@v0.3.6
+    uses: loash-industries/public-workflows/.github/workflows/js-create-release-tag.yml@v0.1.0
     needs: [ validate-code ]
     with:
       package_json_path: package.json
       add_v_prefix_to_version: 'false'
-    secrets:
-      GH_AUTH_TOKEN: ${{ secrets.GH_AUTH_TOKEN }}
 
-  publish_on_tag:
-    uses: loash-industries/workflows/.github/workflows/js-publish-npm.yml@v0.3.6
+  publish:
+    uses: loash-industries/public-workflows/.github/workflows/js-publish-npm.yml@v0.1.0
     needs: [ create-tag ]
     with:
       node_version: 22
       environment: prd
       npm_client: yarn
-      npm_registry_name: "loash-industries"
     secrets:
-      GH_AUTH_TOKEN: ${{ secrets.GH_AUTH_TOKEN }}
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
