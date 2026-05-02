@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/loash-industries/keyspace/compare/v1.0.0...v1.0.1) (2026-05-02)
+
+
+### Bug Fixes
+
+* trigger initial semantic-release ([b1ae0bd](https://github.com/loash-industries/keyspace/commit/b1ae0bdd5583c51040c3cc93f6aff9bdf333fc2d))
+
 # 1.0.0 (2026-05-02)
 
 
