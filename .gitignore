@@ -403,3 +403,5 @@ test-report.xml
 junit.xml
 coverage/*
 .history/*
+
+contracts/build/*

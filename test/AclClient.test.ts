@@ -642,7 +642,7 @@ describe('rotateEntry', () => {
       .mockResolvedValueOnce(makeEntry({ isStale: true })) // second call inside readData
     mockSealDecrypt.mockResolvedValue(PLAINTEXT)
     mockSealEncrypt.mockResolvedValue(ENCRYPTED)
-    storageAdapter.upload.mockResolvedValue(newCid)
+    storageAdapter.upload.mockResolvedValue(`ipfs://${newCid}`)
 
     const client = makeClient({ executor, storageAdapter })
     const result = await client.rotateEntry({
