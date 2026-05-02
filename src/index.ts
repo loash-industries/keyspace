@@ -12,7 +12,6 @@ export {
   LOCATIONS_SCHEMA_NAME,
   LOCATIONS_SCHEMA_VERSION,
 } from './locations'
-
 export type {
   Role,
   AclMeta,
