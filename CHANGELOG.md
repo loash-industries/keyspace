@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/loash-industries/keyspace/compare/v1.0.1...v1.0.2) (2026-05-03)
+
+
+### Bug Fixes
+
+* issue with imports and module build type  mismatches ([c6046ed](https://github.com/loash-industries/keyspace/commit/c6046edfe8b142938c10ac797e4d4319fe112f3e))
+
 ## [1.0.1](https://github.com/loash-industries/keyspace/compare/v1.0.0...v1.0.1) (2026-05-02)
 
 
