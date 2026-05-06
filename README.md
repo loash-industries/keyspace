@@ -1,6 +1,6 @@
 # @trinaryex/keyspace
 
-End-to-end encrypted data sharing using Sui for on-chain access control, Seal threshold encryption for decryption key dissemination and .
+End-to-end encrypted data sharing using Sui for on-chain access control, Seal threshold encryption for decryption key dissemination and various storage backends for persisting encrypted data. Tested primarily on IPFS via Pinata auth'd pinning service.
 
 ```
 Client App  ──SDK──>  Sui (ACL membership)
