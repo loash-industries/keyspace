@@ -14,6 +14,7 @@ import type {
 import { AclClientError, AclError } from './errors'
 import {
   createKeyspaceTx,
+  editDescriptionTx,
   editEntryTx,
   grantTx,
   publishEntryTx,
@@ -174,6 +175,23 @@ export class AclClient {
   }
 
   // ── Data operations ─────────────────────────────────────────────────────────
+
+  async editDescription(opts: {
+    aclId: string
+    entryId: string
+    newDescription: string
+    daoId?: string
+  }): Promise<void> {
+    const daoId = this.requireDaoId(opts.daoId)
+    const tx = editDescriptionTx(
+      this.packageId,
+      opts.aclId,
+      opts.entryId,
+      daoId,
+      opts.newDescription,
+    )
+    await this.executor(tx)
+  }
 
   async writeData(opts: {
     aclId: string
