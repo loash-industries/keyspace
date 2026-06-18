@@ -1,3 +1,8 @@
+## 1.2.0 (2026-06-18)
+
+* feat: allow for big version bumps ([9e21e8f](https://github.com/loash-industries/keyspace/commit/9e21e8f))
+* feat!: empty ([39bcc62](https://github.com/loash-industries/keyspace/commit/39bcc62))
+
 # [1.1.0](https://github.com/loash-industries/keyspace/compare/v1.0.2...v1.1.0) (2026-06-18)
 
 
