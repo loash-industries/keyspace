@@ -156,13 +156,20 @@ export class AclClient {
   }
 
   /**
-   * Returns true if `address` is in the Read principal list.
-   * OU (dao) principals are not checked here — use getAcl for full detail.
+   * Returns true if `address` holds Read access either directly as a player
+   * principal, or indirectly via an OU principal whose `daoId` is supplied.
+   * Pass `daoId` to check OU membership; omit to check player membership only.
    */
-  async hasAccess(opts: { aclId: string; address: string }): Promise<boolean> {
+  async hasAccess(opts: {
+    aclId: string
+    address: string
+    daoId?: string
+  }): Promise<boolean> {
     const acl = await this.getAcl(opts.aclId)
     return acl.readPrincipals.some(
-      (p) => p.type === 'player' && p.address === opts.address,
+      (p) =>
+        (p.type === 'player' && p.address === opts.address) ||
+        (p.type === 'ou' && opts.daoId !== undefined && p.daoId === opts.daoId),
     )
   }
 
@@ -191,13 +198,13 @@ export class AclClient {
       data,
     )
 
-    const location = await this.storageAdapter.upload(encrypted)
+    const uri = await this.storageAdapter.upload(encrypted)
 
     const tx = publishEntryTx(
       this.packageId,
       opts.aclId,
       daoId,
-      location,
+      uri,
       opts.description,
     )
     const result = await this.executor(tx)
@@ -214,7 +221,7 @@ export class AclClient {
       )
     }
 
-    return { entryId: entryChange.objectId, location, epoch: meta.epoch }
+    return { entryId: entryChange.objectId, uri, epoch: meta.epoch }
   }
 
   async readData(opts: {
@@ -238,7 +245,7 @@ export class AclClient {
       )
     }
 
-    const encrypted = await this.storageAdapter.download(entry.location)
+    const encrypted = await this.storageAdapter.download(entry.uri)
 
     return sealDecrypt({
       packageId: this.packageId,
@@ -276,18 +283,18 @@ export class AclClient {
       data,
     )
 
-    const location = await this.storageAdapter.upload(encrypted)
+    const uri = await this.storageAdapter.upload(encrypted)
 
     const tx = editEntryTx(
       this.packageId,
       opts.aclId,
       opts.entryId,
       daoId,
-      location,
+      uri,
     )
     await this.executor(tx)
 
-    return { entryId: opts.entryId, location, epoch: meta.epoch }
+    return { entryId: opts.entryId, uri, epoch: meta.epoch }
   }
 
   async rotateEntry(opts: {
@@ -332,18 +339,18 @@ export class AclClient {
       plaintext,
     )
 
-    const newLocation = await this.storageAdapter.upload(encrypted)
+    const newUri = await this.storageAdapter.upload(encrypted)
 
     const tx = updateEntryTx(
       this.packageId,
       opts.aclId,
       opts.entryId,
       daoId,
-      newLocation,
+      newUri,
     )
     await this.executor(tx)
 
-    return { newLocation, epoch: meta.epoch }
+    return { newUri, epoch: meta.epoch }
   }
 
   async rotateAllStaleEntries(opts: {
@@ -353,6 +360,7 @@ export class AclClient {
     daoId?: string
     onProgress?: (done: number, total: number) => void
   }): Promise<RotateAllResult> {
+    this.requireDaoId(opts.daoId)
     const stale = await this.getStaleEntries(opts.aclId)
     let rotated = 0
     let skipped = 0

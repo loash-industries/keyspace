@@ -82,7 +82,7 @@ function makeEntry(overrides: Partial<EntryMeta> = {}): EntryMeta {
   return {
     id: ENTRY_ID,
     keyspaceId: ACL_ID,
-    location: `ipfs://${CID}`,
+    uri: `ipfs://${CID}`,
     description: 'test entry',
     createdBy: OWNER,
     epoch: 1,
@@ -188,6 +188,32 @@ describe('hasAccess', () => {
     const client = makeClient()
     expect(await client.hasAccess({ aclId: ACL_ID, address: MEMBER })).toBe(
       true,
+    )
+  })
+
+  it('returns true for an OU principal when matching daoId is provided', async () => {
+    mockFetchKeyspaceDetail.mockResolvedValue(
+      makeAclDetail({
+        readPrincipals: [{ type: 'ou', daoId: DAO_ID }],
+        roles: [],
+      }),
+    )
+    const client = makeClient()
+    expect(
+      await client.hasAccess({ aclId: ACL_ID, address: MEMBER, daoId: DAO_ID }),
+    ).toBe(true)
+  })
+
+  it('returns false for an OU principal when daoId is not provided', async () => {
+    mockFetchKeyspaceDetail.mockResolvedValue(
+      makeAclDetail({
+        readPrincipals: [{ type: 'ou', daoId: DAO_ID }],
+        roles: [],
+      }),
+    )
+    const client = makeClient()
+    expect(await client.hasAccess({ aclId: ACL_ID, address: MEMBER })).toBe(
+      false,
     )
   })
 
@@ -340,7 +366,7 @@ describe('writeData', () => {
     expect(executor).toHaveBeenCalledTimes(1)
     expect(result).toEqual({
       entryId: ENTRY_ID,
-      location: `ipfs://${CID}`,
+      uri: `ipfs://${CID}`,
       epoch: 2,
     })
   })
@@ -471,7 +497,7 @@ describe('editData', () => {
     expect(executor).toHaveBeenCalledTimes(1)
     expect(result).toEqual({
       entryId: ENTRY_ID,
-      location: `ipfs://${CID}`,
+      uri: `ipfs://${CID}`,
       epoch: 3,
     })
   })
@@ -599,7 +625,7 @@ describe('rotateEntry', () => {
     expect(mockSealDecrypt).toHaveBeenCalled()
     expect(mockSealEncrypt).toHaveBeenCalled()
     expect(executor).toHaveBeenCalledTimes(1)
-    expect(result).toEqual({ newLocation: `ipfs://${newCid}`, epoch: 3 })
+    expect(result).toEqual({ newUri: `ipfs://${newCid}`, epoch: 3 })
   })
 })
 

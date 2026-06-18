@@ -24,6 +24,7 @@ function encodeRole(role: KeyspaceRole) {
     case 'Grant': return RoleSchema.serialize({ Grant: null })
     case 'Read':  return RoleSchema.serialize({ Read: null })
     case 'Write': return RoleSchema.serialize({ Write: null })
+    default: throw new Error(`Unknown KeyspaceRole: ${role satisfies never}`)
   }
 }
 
@@ -96,12 +97,12 @@ export function revokeTx(
   return tx
 }
 
-/** `keyspace::publish_entry(keyspace, location, description, dao)` */
+/** `keyspace::publish_entry(keyspace, uri, description, dao)` */
 export function publishEntryTx(
   packageId: string,
   keyspaceId: string,
   daoId: string,
-  location: string,
+  uri: string,
   description: string,
 ): Transaction {
   const tx = new Transaction()
@@ -109,7 +110,7 @@ export function publishEntryTx(
     target: `${packageId}::keyspace::publish_entry`,
     arguments: [
       tx.object(keyspaceId),
-      tx.pure.vector('u8', textBytes(location)),
+      tx.pure.vector('u8', textBytes(uri)),
       tx.pure.vector('u8', textBytes(description)),
       tx.object(daoId),
     ],
@@ -117,13 +118,13 @@ export function publishEntryTx(
   return tx
 }
 
-/** `keyspace::update_entry(keyspace, entry, new_location, dao)` — key rotation. */
+/** `keyspace::update_entry(keyspace, entry, new_uri, dao)` — key rotation. */
 export function updateEntryTx(
   packageId: string,
   keyspaceId: string,
   entryId: string,
   daoId: string,
-  newLocation: string,
+  newUri: string,
 ): Transaction {
   const tx = new Transaction()
   tx.moveCall({
@@ -131,20 +132,20 @@ export function updateEntryTx(
     arguments: [
       tx.object(keyspaceId),
       tx.object(entryId),
-      tx.pure.vector('u8', textBytes(newLocation)),
+      tx.pure.vector('u8', textBytes(newUri)),
       tx.object(daoId),
     ],
   })
   return tx
 }
 
-/** `keyspace::edit_entry(keyspace, entry, new_location, dao)` — same-epoch location edit. */
+/** `keyspace::edit_entry(keyspace, entry, new_uri, dao)` — same-epoch URI edit. */
 export function editEntryTx(
   packageId: string,
   keyspaceId: string,
   entryId: string,
   daoId: string,
-  newLocation: string,
+  newUri: string,
 ): Transaction {
   const tx = new Transaction()
   tx.moveCall({
@@ -152,7 +153,7 @@ export function editEntryTx(
     arguments: [
       tx.object(keyspaceId),
       tx.object(entryId),
-      tx.pure.vector('u8', textBytes(newLocation)),
+      tx.pure.vector('u8', textBytes(newUri)),
       tx.object(daoId),
     ],
   })

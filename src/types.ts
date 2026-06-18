@@ -44,7 +44,7 @@ export interface EntryMeta {
   id: string
   /** Object ID of the parent Keyspace. */
   keyspaceId: string
-  location: string
+  uri: string
   description: string
   createdBy: string
   epoch: number
@@ -61,12 +61,12 @@ export interface CreateAclResult {
 
 export interface WriteResult {
   entryId: string
-  location: string
+  uri: string
   epoch: number
 }
 
 export interface RotateResult {
-  newLocation: string
+  newUri: string
   epoch: number
 }
 
@@ -108,7 +108,7 @@ export type SignPersonalMessageFn = (message: Uint8Array) => Promise<string>
 
 export interface StorageAdapter {
   upload(data: Uint8Array): Promise<string>
-  download(location: string): Promise<Uint8Array>
+  download(uri: string): Promise<Uint8Array>
 }
 
 // ── Client config ─────────────────────────────────────────────────────────────

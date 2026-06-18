@@ -12,7 +12,7 @@ import { AclClientError, AclError } from './errors'
 //
 // armature_vault::keyspace::EncryptedEntry fields:
 //   keyspace_id:  string
-//   location:     string
+//   uri:          string
 //   description:  string
 //   created_by:   string
 //   epoch:        string | number
@@ -31,7 +31,7 @@ interface RawKeyspaceFields {
 
 interface RawEncryptedEntryFields {
   keyspace_id: string
-  location: string
+  uri: string
   description: string
   created_by: string
   epoch: string | number
@@ -164,7 +164,7 @@ export async function fetchEncryptedEntry(
   return {
     id: entryId,
     keyspaceId: fields.keyspace_id,
-    location: fields.location,
+    uri: fields.uri,
     description: fields.description,
     createdBy: fields.created_by,
     epoch: entryEpoch,
@@ -194,7 +194,7 @@ async function fetchEncryptedEntries(
       {
         id: obj.data.objectId as string,
         keyspaceId: fields.keyspace_id,
-        location: fields.location,
+        uri: fields.uri,
         description: fields.description,
         createdBy: fields.created_by,
         epoch: entryEpoch,

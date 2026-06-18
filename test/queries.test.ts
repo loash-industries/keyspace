@@ -188,7 +188,7 @@ describe('fetchKeyspaceDetail', () => {
               dataType: 'moveObject',
               fields: {
                 keyspace_id: ACL_ID,
-                location: 'ipfs://QmABC',
+                uri: 'ipfs://QmABC',
                 description: 'test entry',
                 created_by: OWNER,
                 epoch: 5,
@@ -203,7 +203,7 @@ describe('fetchKeyspaceDetail', () => {
     expect(result!.entries[0]).toMatchObject({
       id: ENTRY_ID,
       keyspaceId: ACL_ID,
-      location: 'ipfs://QmABC',
+      uri: 'ipfs://QmABC',
       description: 'test entry',
       epoch: 5,
       isStale: false,
@@ -229,7 +229,7 @@ describe('fetchEncryptedEntry', () => {
       getObject: (jest.fn() as any).mockResolvedValue(
         moveObjectResponse(ENTRY_ID, {
           keyspace_id: ACL_ID,
-          location: 'ipfs://QmXYZ',
+          uri: 'ipfs://QmXYZ',
           description: 'data',
           created_by: OWNER,
           epoch: 3,
@@ -246,7 +246,7 @@ describe('fetchEncryptedEntry', () => {
       getObject: (jest.fn() as any).mockResolvedValue(
         moveObjectResponse(ENTRY_ID, {
           keyspace_id: ACL_ID,
-          location: 'ipfs://QmXYZ',
+          uri: 'ipfs://QmXYZ',
           description: 'data',
           created_by: OWNER,
           epoch: 1,
@@ -262,7 +262,7 @@ describe('fetchEncryptedEntry', () => {
       getObject: (jest.fn() as any).mockResolvedValue(
         moveObjectResponse(ENTRY_ID, {
           keyspace_id: ACL_ID,
-          location: 'ipfs://QmFULL',
+          uri: 'ipfs://QmFULL',
           description: 'full entry',
           created_by: OWNER,
           epoch: '2',
@@ -273,7 +273,7 @@ describe('fetchEncryptedEntry', () => {
     expect(result).toEqual({
       id: ENTRY_ID,
       keyspaceId: ACL_ID,
-      location: 'ipfs://QmFULL',
+      uri: 'ipfs://QmFULL',
       description: 'full entry',
       createdBy: OWNER,
       epoch: 2,
