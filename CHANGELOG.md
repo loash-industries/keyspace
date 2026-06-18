@@ -1,3 +1,18 @@
+# [1.1.0](https://github.com/loash-industries/keyspace/compare/v1.0.2...v1.1.0) (2026-06-18)
+
+
+### Bug Fixes
+
+* patches ([2b69d11](https://github.com/loash-industries/keyspace/commit/2b69d112826b709e41a69554bfe676af8839ce9f))
+* prettier ([05f9e05](https://github.com/loash-industries/keyspace/commit/05f9e057031e15cbcd898e61419ea15939d348ea))
+* tscheck ([625155f](https://github.com/loash-industries/keyspace/commit/625155f1ca24e6760a622acdd7d3d45a0489d968))
+
+
+### Features
+
+* migrated acl to new keyspace contract design utilizing armature orgs ([3d2706e](https://github.com/loash-industries/keyspace/commit/3d2706e62e482e342719a61671af91b14a7bb8ef))
+* remove contracts ([bfa91a8](https://github.com/loash-industries/keyspace/commit/bfa91a8985f70eba0e3360fbd7456d81291fda23))
+
 ## [1.0.2](https://github.com/loash-industries/keyspace/compare/v1.0.1...v1.0.2) (2026-05-03)
 
 
