@@ -9,7 +9,7 @@ const SESSION_TTL_MIN = 10
 
 interface CachedSession {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  key: any // SessionKey — typed as any to avoid peer-dep version conflicts
+  key: any
   address: string
   expiresAt: number
 }
@@ -72,22 +72,21 @@ async function getOrCreateSessionKey(
 // ── Encrypt ───────────────────────────────────────────────────────────────────
 
 /**
- * Encrypts data using Seal threshold encryption keyed to an AllowList.
+ * Encrypts `data` using Seal threshold encryption keyed to a Keyspace.
  *
- * Policy ID = allowlistId_bytes (32) || random_nonce (5), hex-encoded.
- * This is checked against `seal_approve` which verifies the first 32 bytes
- * match the AllowList UID.
+ * Policy ID = keyspaceId_bytes (32) || random_nonce (5), hex-encoded.
+ * `keyspace::seal_approve` verifies the first 32 bytes match the Keyspace UID.
  */
 export async function sealEncrypt(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sealClient: any,
   packageId: string,
-  allowlistId: string,
+  keyspaceId: string,
   data: Uint8Array,
 ): Promise<Uint8Array> {
   const nonce = crypto.getRandomValues(new Uint8Array(5))
-  const allowlistBytes = fromHex(allowlistId)
-  const id = toHex(new Uint8Array([...allowlistBytes, ...nonce]))
+  const keyspaceBytes = fromHex(keyspaceId)
+  const id = toHex(new Uint8Array([...keyspaceBytes, ...nonce]))
 
   const { encryptedObject } = await sealClient.encrypt({
     threshold: 1,
@@ -103,7 +102,9 @@ export async function sealEncrypt(
 
 export interface DecryptOptions {
   packageId: string
-  allowlistId: string
+  keyspaceId: string
+  /** DAO object ID — required by keyspace::seal_approve. */
+  daoId: string
   encryptedData: Uint8Array
   walletAddress: string
   signPersonalMessage: SignPersonalMessageFn
@@ -117,7 +118,8 @@ export interface DecryptOptions {
 export async function sealDecrypt(opts: DecryptOptions): Promise<Uint8Array> {
   const {
     packageId,
-    allowlistId,
+    keyspaceId,
+    daoId,
     encryptedData,
     walletAddress,
     signPersonalMessage,
@@ -134,16 +136,17 @@ export async function sealDecrypt(opts: DecryptOptions): Promise<Uint8Array> {
     sessionKeyTtlMin,
   )
 
-  // Parse the encrypted object to get the policy ID that was used during encryption
   const parsed = EncryptedObject.parse(encryptedData)
 
-  // Build the seal_approve PTB (transaction kind only — not a full tx)
+  // Build the seal_approve PTB:
+  // entry fun seal_approve(id: vector<u8>, keyspace: &Keyspace, dao: &DAO, ctx: &TxContext)
   const tx = new Transaction()
   tx.moveCall({
-    target: `${packageId}::acl_encrypt::seal_approve`,
+    target: `${packageId}::keyspace::seal_approve`,
     arguments: [
       tx.pure.vector('u8', fromHex(parsed.id)),
-      tx.object(allowlistId),
+      tx.object(keyspaceId),
+      tx.object(daoId),
     ],
   })
   const txBytes = await tx.build({

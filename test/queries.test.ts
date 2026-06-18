@@ -1,23 +1,23 @@
 import { jest } from '@jest/globals'
 import {
-  fetchAdminCaps,
-  fetchAllowListMeta,
-  fetchAllowListDetail,
+  fetchKeyspaceMeta,
+  fetchKeyspaceDetail,
   fetchEncryptedEntry,
-  fetchAccessibleAcls,
+  fetchAccessibleKeyspaces,
 } from '../src/queries'
 import { AclError, AclClientError } from '../src/errors'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const PKG = '0xpkg'
 const ACL_ID = '0xacl001'
 const ENTRY_ID = '0xentry01'
 const OWNER = '0xowner'
+const MEMBER1 = '0x0000000000000000000000000000000000000000000000000000000000001001'
+const MEMBER2 = '0x0000000000000000000000000000000000000000000000000000000000001002'
+const DAO_ID = '0x0000000000000000000000000000000000000000000000000000000000002001'
 
 function makeSuiClient(overrides: Record<string, jest.Mock> = {}) {
   return {
-    getOwnedObjects: jest.fn() as jest.Mock,
     getObject: jest.fn() as jest.Mock,
     multiGetObjects: jest.fn() as jest.Mock,
     ...overrides,
@@ -33,96 +33,43 @@ function moveObjectResponse(id: string, fields: Record<string, unknown>) {
   }
 }
 
-// ── fetchAdminCaps ────────────────────────────────────────────────────────────
+function makeKeyspaceFields(overrides: Record<string, unknown> = {}) {
+  return {
+    name: 'My Keyspace',
+    version: 1,
+    entries: [],
+    acl: { contents: [] },
+    ...overrides,
+  }
+}
 
-describe('fetchAdminCaps', () => {
-  it('returns an empty array when no objects are returned', async () => {
-    const client = makeSuiClient({
-      getOwnedObjects: (jest.fn() as any).mockResolvedValue({ data: [] }),
-    })
-    const result = await fetchAdminCaps(client, PKG, OWNER)
-    expect(result).toEqual([])
-    expect(client.getOwnedObjects).toHaveBeenCalledWith({
-      owner: OWNER,
-      filter: { StructType: `${PKG}::acl_encrypt::AdminCap` },
-      options: { showContent: true },
-    })
-  })
+// ── fetchKeyspaceMeta ─────────────────────────────────────────────────────────
 
-  it('returns AdminCap objects from the response', async () => {
-    const client = makeSuiClient({
-      getOwnedObjects: (jest.fn() as any).mockResolvedValue({
-        data: [
-          {
-            data: {
-              objectId: '0xcap1',
-              content: {
-                dataType: 'moveObject',
-                fields: { allowlist_id: ACL_ID },
-              },
-            },
-          },
-          {
-            data: {
-              objectId: '0xcap2',
-              content: {
-                dataType: 'moveObject',
-                fields: { allowlist_id: '0xacl002' },
-              },
-            },
-          },
-        ],
-      }),
-    })
-    const result = await fetchAdminCaps(client, PKG, OWNER)
-    expect(result).toHaveLength(2)
-    expect(result[0]).toEqual({ id: '0xcap1', aclId: ACL_ID })
-    expect(result[1]).toEqual({ id: '0xcap2', aclId: '0xacl002' })
-  })
-
-  it('filters out non-moveObject entries', async () => {
-    const client = makeSuiClient({
-      getOwnedObjects: (jest.fn() as any).mockResolvedValue({
-        data: [
-          { data: { objectId: '0xcap1', content: { dataType: 'package' } } },
-        ],
-      }),
-    })
-    const result = await fetchAdminCaps(client, PKG, OWNER)
-    expect(result).toEqual([])
-  })
-})
-
-// ── fetchAllowListMeta ────────────────────────────────────────────────────────
-
-describe('fetchAllowListMeta', () => {
+describe('fetchKeyspaceMeta', () => {
   it('returns null when content is not moveObject', async () => {
     const client = makeSuiClient({
       getObject: (jest.fn() as any).mockResolvedValue({
         data: { content: { dataType: 'package' } },
       }),
     })
-    const result = await fetchAllowListMeta(client, ACL_ID)
+    const result = await fetchKeyspaceMeta(client, ACL_ID)
     expect(result).toBeNull()
   })
 
-  it('returns AclMeta for a valid allowlist object', async () => {
+  it('returns AclMeta for a valid keyspace object', async () => {
     const client = makeSuiClient({
       getObject: (jest.fn() as any).mockResolvedValue(
-        moveObjectResponse(ACL_ID, {
-          owner: OWNER,
-          name: 'My ACL',
+        moveObjectResponse(ACL_ID, makeKeyspaceFields({
+          name: 'My Keyspace',
           version: 3,
           entries: ['e1', 'e2'],
-          list: { fields: { contents: [] } },
-        }),
+        })),
       ),
     })
-    const result = await fetchAllowListMeta(client, ACL_ID)
+    const result = await fetchKeyspaceMeta(client, ACL_ID)
     expect(result).toEqual({
       id: ACL_ID,
-      owner: OWNER,
-      name: 'My ACL',
+      name: 'My Keyspace',
       epoch: 3,
       entryCount: 2,
     })
@@ -132,21 +79,20 @@ describe('fetchAllowListMeta', () => {
     const client = makeSuiClient({
       getObject: (jest.fn() as any).mockResolvedValue(
         moveObjectResponse(ACL_ID, {
-          owner: OWNER,
-          name: 'My ACL',
+          name: 'My Keyspace',
           entries: [],
-          list: { fields: { contents: [] } },
+          acl: { contents: [] },
         }),
       ),
     })
-    const result = await fetchAllowListMeta(client, ACL_ID)
+    const result = await fetchKeyspaceMeta(client, ACL_ID)
     expect(result?.epoch).toBe(0)
   })
 })
 
-// ── fetchAllowListDetail ──────────────────────────────────────────────────────
+// ── fetchKeyspaceDetail ───────────────────────────────────────────────────────
 
-describe('fetchAllowListDetail', () => {
+describe('fetchKeyspaceDetail', () => {
   it('returns null when content is not moveObject', async () => {
     const client = makeSuiClient({
       getObject: (jest.fn() as any).mockResolvedValue({
@@ -154,48 +100,85 @@ describe('fetchAllowListDetail', () => {
       }),
       multiGetObjects: (jest.fn() as any).mockResolvedValue([]),
     })
-    const result = await fetchAllowListDetail(client, PKG, ACL_ID)
+    const result = await fetchKeyspaceDetail(client, ACL_ID)
     expect(result).toBeNull()
   })
 
-  it('returns AclDetail with roles and entries', async () => {
-    const member1 = '0xmember1'
-    const member2 = '0xmember2'
+  it('returns AclDetail with empty principals when acl is empty', async () => {
     const client = makeSuiClient({
       getObject: (jest.fn() as any).mockResolvedValue(
-        moveObjectResponse(ACL_ID, {
-          owner: OWNER,
+        moveObjectResponse(ACL_ID, makeKeyspaceFields({
           name: 'Shared ACL',
           version: 2,
-          entries: [],
-          list: { fields: { contents: [member1, member2] } },
-        }),
+          acl: { contents: [] },
+        })),
       ),
       multiGetObjects: (jest.fn() as any).mockResolvedValue([]),
     })
-    const result = await fetchAllowListDetail(client, PKG, ACL_ID)
+    const result = await fetchKeyspaceDetail(client, ACL_ID)
     expect(result).not.toBeNull()
     expect(result!.id).toBe(ACL_ID)
-    expect(result!.owner).toBe(OWNER)
     expect(result!.name).toBe('Shared ACL')
     expect(result!.epoch).toBe(2)
-    expect(result!.roles).toEqual([
-      { type: 'address', address: member1 },
-      { type: 'address', address: member2 },
-    ])
+    expect(result!.grantPrincipals).toEqual([])
+    expect(result!.readPrincipals).toEqual([])
+    expect(result!.writePrincipals).toEqual([])
     expect(result!.entries).toEqual([])
+  })
+
+  it('parses Player principals from acl.contents', async () => {
+    const client = makeSuiClient({
+      getObject: (jest.fn() as any).mockResolvedValue(
+        moveObjectResponse(ACL_ID, makeKeyspaceFields({
+          version: 1,
+          acl: {
+            contents: [
+              {
+                key: 'Read',
+                value: [
+                  { Player: { addr: MEMBER1 } },
+                  { Player: { addr: MEMBER2 } },
+                ],
+              },
+            ],
+          },
+        })),
+      ),
+      multiGetObjects: (jest.fn() as any).mockResolvedValue([]),
+    })
+    const result = await fetchKeyspaceDetail(client, ACL_ID)
+    expect(result!.readPrincipals).toEqual([
+      { type: 'player', address: MEMBER1 },
+      { type: 'player', address: MEMBER2 },
+    ])
+    expect(result!.roles).toEqual(result!.readPrincipals)
+  })
+
+  it('parses Ou principals from acl.contents', async () => {
+    const client = makeSuiClient({
+      getObject: (jest.fn() as any).mockResolvedValue(
+        moveObjectResponse(ACL_ID, makeKeyspaceFields({
+          version: 1,
+          acl: {
+            contents: [
+              { key: 'Grant', value: [{ Ou: { dao_id: DAO_ID } }] },
+            ],
+          },
+        })),
+      ),
+      multiGetObjects: (jest.fn() as any).mockResolvedValue([]),
+    })
+    const result = await fetchKeyspaceDetail(client, ACL_ID)
+    expect(result!.grantPrincipals).toEqual([{ type: 'ou', daoId: DAO_ID }])
   })
 
   it('includes fetched entries in the detail', async () => {
     const client = makeSuiClient({
       getObject: (jest.fn() as any).mockResolvedValue(
-        moveObjectResponse(ACL_ID, {
-          owner: OWNER,
-          name: 'ACL',
+        moveObjectResponse(ACL_ID, makeKeyspaceFields({
           version: 5,
           entries: [ENTRY_ID],
-          list: { fields: { contents: [] } },
-        }),
+        })),
       ),
       multiGetObjects: (jest.fn() as any).mockResolvedValue([
         {
@@ -204,8 +187,8 @@ describe('fetchAllowListDetail', () => {
             content: {
               dataType: 'moveObject',
               fields: {
-                allowlist_id: ACL_ID,
-                location: 'ipfs://QmABC',
+                keyspace_id: ACL_ID,
+                uri: 'ipfs://QmABC',
                 description: 'test entry',
                 created_by: OWNER,
                 epoch: 5,
@@ -215,12 +198,12 @@ describe('fetchAllowListDetail', () => {
         },
       ]),
     })
-    const result = await fetchAllowListDetail(client, PKG, ACL_ID)
+    const result = await fetchKeyspaceDetail(client, ACL_ID)
     expect(result!.entries).toHaveLength(1)
     expect(result!.entries[0]).toMatchObject({
       id: ENTRY_ID,
-      aclId: ACL_ID,
-      location: 'ipfs://QmABC',
+      keyspaceId: ACL_ID,
+      uri: 'ipfs://QmABC',
       description: 'test entry',
       epoch: 5,
       isStale: false,
@@ -241,12 +224,12 @@ describe('fetchEncryptedEntry', () => {
     expect(result).toBeNull()
   })
 
-  it('marks entry as not stale when entry epoch equals acl epoch', async () => {
+  it('marks entry as not stale when entry epoch equals keyspace epoch', async () => {
     const client = makeSuiClient({
       getObject: (jest.fn() as any).mockResolvedValue(
         moveObjectResponse(ENTRY_ID, {
-          allowlist_id: ACL_ID,
-          location: 'ipfs://QmXYZ',
+          keyspace_id: ACL_ID,
+          uri: 'ipfs://QmXYZ',
           description: 'data',
           created_by: OWNER,
           epoch: 3,
@@ -258,12 +241,12 @@ describe('fetchEncryptedEntry', () => {
     expect(result!.epoch).toBe(3)
   })
 
-  it('marks entry as stale when entry epoch is less than acl epoch', async () => {
+  it('marks entry as stale when entry epoch is less than keyspace epoch', async () => {
     const client = makeSuiClient({
       getObject: (jest.fn() as any).mockResolvedValue(
         moveObjectResponse(ENTRY_ID, {
-          allowlist_id: ACL_ID,
-          location: 'ipfs://QmXYZ',
+          keyspace_id: ACL_ID,
+          uri: 'ipfs://QmXYZ',
           description: 'data',
           created_by: OWNER,
           epoch: 1,
@@ -278,8 +261,8 @@ describe('fetchEncryptedEntry', () => {
     const client = makeSuiClient({
       getObject: (jest.fn() as any).mockResolvedValue(
         moveObjectResponse(ENTRY_ID, {
-          allowlist_id: ACL_ID,
-          location: 'ipfs://QmFULL',
+          keyspace_id: ACL_ID,
+          uri: 'ipfs://QmFULL',
           description: 'full entry',
           created_by: OWNER,
           epoch: '2',
@@ -289,8 +272,8 @@ describe('fetchEncryptedEntry', () => {
     const result = await fetchEncryptedEntry(client, ENTRY_ID, 2)
     expect(result).toEqual({
       id: ENTRY_ID,
-      aclId: ACL_ID,
-      location: 'ipfs://QmFULL',
+      keyspaceId: ACL_ID,
+      uri: 'ipfs://QmFULL',
       description: 'full entry',
       createdBy: OWNER,
       epoch: 2,
@@ -299,9 +282,9 @@ describe('fetchEncryptedEntry', () => {
   })
 })
 
-// ── fetchAccessibleAcls ───────────────────────────────────────────────────────
+// ── fetchAccessibleKeyspaces ──────────────────────────────────────────────────
 
-describe('fetchAccessibleAcls', () => {
+describe('fetchAccessibleKeyspaces', () => {
   const INDEXER = 'https://indexer.example.com'
 
   let fetchMock: any
@@ -315,15 +298,15 @@ describe('fetchAccessibleAcls', () => {
     jest.restoreAllMocks()
   })
 
-  it('returns aclIds from the indexer', async () => {
+  it('returns keyspaceIds from the indexer', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
-      json: async () => ({ aclIds: ['0xacl1', '0xacl2'] }),
+      json: async () => ({ keyspaceIds: ['0xacl1', '0xacl2'] }),
     })
-    const result = await fetchAccessibleAcls(INDEXER, OWNER)
+    const result = await fetchAccessibleKeyspaces(INDEXER, OWNER)
     expect(result).toEqual(['0xacl1', '0xacl2'])
     expect(fetchMock).toHaveBeenCalledWith(
-      `${INDEXER}/v1/address/${OWNER}/acls`,
+      `${INDEXER}/v1/address/${OWNER}/keyspaces`,
     )
   })
 
@@ -333,10 +316,10 @@ describe('fetchAccessibleAcls', () => {
       status: 503,
       statusText: 'Service Unavailable',
     })
-    await expect(fetchAccessibleAcls(INDEXER, OWNER)).rejects.toThrow(
+    await expect(fetchAccessibleKeyspaces(INDEXER, OWNER)).rejects.toThrow(
       AclClientError,
     )
-    await expect(fetchAccessibleAcls(INDEXER, OWNER)).rejects.toMatchObject({
+    await expect(fetchAccessibleKeyspaces(INDEXER, OWNER)).rejects.toMatchObject({
       code: AclError.UnexpectedResponse,
     })
   })

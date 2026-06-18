@@ -3,7 +3,7 @@ import { AclError, AclClientError } from '../src/errors'
 describe('AclError', () => {
   it('has the expected string values', () => {
     expect(AclError.AccessDenied).toBe('ACL_ACCESS_DENIED')
-    expect(AclError.WrongAdminCap).toBe('ACL_WRONG_CAP')
+    expect(AclError.DaoIdRequired).toBe('ACL_DAO_ID_REQUIRED')
     expect(AclError.AlreadyCurrentEpoch).toBe('ACL_ALREADY_CURRENT_EPOCH')
     expect(AclError.EpochMismatch).toBe('ACL_EPOCH_MISMATCH')
     expect(AclError.RoleAlreadyExists).toBe('ACL_ROLE_EXISTS')
@@ -13,7 +13,6 @@ describe('AclError', () => {
     expect(AclError.SessionKeyExpired).toBe('ACL_SESSION_KEY_EXPIRED')
     expect(AclError.StorageUploadFailed).toBe('ACL_STORAGE_UPLOAD_FAILED')
     expect(AclError.StorageFetchFailed).toBe('ACL_STORAGE_FETCH_FAILED')
-    expect(AclError.NotImplemented).toBe('ACL_NOT_IMPLEMENTED')
     expect(AclError.UnexpectedResponse).toBe('ACL_UNEXPECTED_RESPONSE')
   })
 })

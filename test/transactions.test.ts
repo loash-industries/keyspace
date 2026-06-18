@@ -1,90 +1,87 @@
-import { AclError, AclClientError } from '../src/errors'
 import {
-  createAllowlistTx,
-  addMemberTx,
-  removeMemberTx,
+  createKeyspaceTx,
+  grantTx,
+  revokeTx,
   publishEntryTx,
   updateEntryTx,
   editEntryTx,
-  transferAdminCapTx,
-  roleToAddress,
+  editDescriptionTx,
 } from '../src/transactions'
+import type { Principal } from '../src/types'
 
 const PKG = '0xdeadbeef'
-// Sui addresses must be exactly 32 bytes (64 hex chars after 0x)
 const ACL = '0x0000000000000000000000000000000000000000000000000000000000001001'
-const CAP = '0x0000000000000000000000000000000000000000000000000000000000001002'
+const DAO = '0x0000000000000000000000000000000000000000000000000000000000001002'
 const ENTRY =
   '0x0000000000000000000000000000000000000000000000000000000000001003'
 const ADDR =
   '0x0000000000000000000000000000000000000000000000000000000000001004'
 
-describe('roleToAddress', () => {
-  it('returns the address for an address-type role', () => {
-    expect(roleToAddress({ type: 'address', address: ADDR })).toBe(ADDR)
-  })
-
-  it('throws AclClientError(NotImplemented) for tribe roles', () => {
-    expect(() => roleToAddress({ type: 'tribe', tribeId: '0xtribe' })).toThrow(
-      AclClientError,
-    )
-    expect(() => roleToAddress({ type: 'tribe', tribeId: '0xtribe' })).toThrow(
-      /tribe/i,
-    )
-    try {
-      roleToAddress({ type: 'tribe', tribeId: '0xtribe' })
-    } catch (e) {
-      expect((e as AclClientError).code).toBe(AclError.NotImplemented)
-    }
-  })
-})
+const playerPrincipal: Principal = { type: 'player', address: ADDR }
+const ouPrincipal: Principal = {
+  type: 'ou',
+  daoId: '0x0000000000000000000000000000000000000000000000000000000000002001',
+}
 
 describe('transaction builders', () => {
-  it('createAllowlistTx returns a transaction object', () => {
-    const tx = createAllowlistTx(PKG, 'my-acl')
+  it('createKeyspaceTx returns a transaction object', () => {
+    const tx = createKeyspaceTx(PKG, 'my-keyspace')
     expect(tx).toBeTruthy()
     expect(typeof tx).toBe('object')
   })
 
-  it('addMemberTx returns a transaction object', () => {
-    const tx = addMemberTx(PKG, ACL, CAP, ADDR)
+  it('grantTx returns a transaction object for player principal', () => {
+    const tx = grantTx(PKG, ACL, DAO, 'Read', playerPrincipal)
     expect(tx).toBeTruthy()
     expect(typeof tx).toBe('object')
   })
 
-  it('removeMemberTx returns a transaction object', () => {
-    const tx = removeMemberTx(PKG, ACL, CAP, ADDR)
+  it('grantTx returns a transaction object for ou principal', () => {
+    const tx = grantTx(PKG, ACL, DAO, 'Grant', ouPrincipal)
+    expect(tx).toBeTruthy()
+    expect(typeof tx).toBe('object')
+  })
+
+  it('grantTx works for all KeyspaceRole values', () => {
+    for (const role of ['Grant', 'Read', 'Write'] as const) {
+      const tx = grantTx(PKG, ACL, DAO, role, playerPrincipal)
+      expect(tx).toBeTruthy()
+    }
+  })
+
+  it('revokeTx returns a transaction object', () => {
+    const tx = revokeTx(PKG, ACL, DAO, 'Write', playerPrincipal)
     expect(tx).toBeTruthy()
     expect(typeof tx).toBe('object')
   })
 
   it('publishEntryTx returns a transaction object', () => {
-    const tx = publishEntryTx(PKG, ACL, 'ipfs://Qmcid123', 'description')
+    const tx = publishEntryTx(PKG, ACL, DAO, 'ipfs://Qmcid123', 'description')
     expect(tx).toBeTruthy()
     expect(typeof tx).toBe('object')
   })
 
   it('updateEntryTx returns a transaction object', () => {
-    const tx = updateEntryTx(PKG, ACL, ENTRY, 'ipfs://Qmnewcid')
+    const tx = updateEntryTx(PKG, ACL, ENTRY, DAO, 'ipfs://Qmnewcid')
     expect(tx).toBeTruthy()
     expect(typeof tx).toBe('object')
   })
 
   it('editEntryTx returns a transaction object', () => {
-    const tx = editEntryTx(PKG, ACL, ENTRY, 'ipfs://Qmeditcid')
+    const tx = editEntryTx(PKG, ACL, ENTRY, DAO, 'ipfs://Qmeditcid')
     expect(tx).toBeTruthy()
     expect(typeof tx).toBe('object')
   })
 
-  it('transferAdminCapTx returns a transaction object', () => {
-    const tx = transferAdminCapTx(CAP, ADDR)
+  it('editDescriptionTx returns a transaction object', () => {
+    const tx = editDescriptionTx(PKG, ACL, ENTRY, DAO, 'new description')
     expect(tx).toBeTruthy()
     expect(typeof tx).toBe('object')
   })
 
   it('each builder returns a distinct transaction instance', () => {
-    const tx1 = addMemberTx(PKG, ACL, CAP, ADDR)
-    const tx2 = addMemberTx(PKG, ACL, CAP, ADDR)
+    const tx1 = grantTx(PKG, ACL, DAO, 'Read', playerPrincipal)
+    const tx2 = grantTx(PKG, ACL, DAO, 'Read', playerPrincipal)
     expect(tx1).not.toBe(tx2)
   })
 })

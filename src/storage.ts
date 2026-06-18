@@ -65,8 +65,8 @@ export class PinataStorageAdapter implements StorageAdapter {
     return `ipfs://${IpfsHash}`
   }
 
-  async download(location: string): Promise<Uint8Array> {
-    const cid = location.startsWith('ipfs://') ? location.slice(7) : location
+  async download(uri: string): Promise<Uint8Array> {
+    const cid = uri.startsWith('ipfs://') ? uri.slice(7) : uri
     const url = `${this.gateway}/ipfs/${cid}`
     const res = await fetch(url)
 
@@ -144,11 +144,11 @@ export class ObjectStoreStorageAdapter implements StorageAdapter {
     return `${this.baseUrl}/${key}`
   }
 
-  async download(location: string): Promise<Uint8Array> {
+  async download(uri: string): Promise<Uint8Array> {
     const prefix = `${this.baseUrl}/`
-    const key = location.startsWith(prefix)
-      ? location.slice(prefix.length)
-      : location
+    const key = uri.startsWith(prefix)
+      ? uri.slice(prefix.length)
+      : uri
     try {
       return await this.client.get(this.bucket, key)
     } catch (err) {
@@ -286,24 +286,24 @@ export class S3ObjectStoreClient implements ObjectStoreClient {
 // ── Download URL resolver ─────────────────────────────────────────────────────
 
 /**
- * Resolve a protocol-denominated `location` to a downloadable HTTP(S) URL.
+ * Resolve a protocol-denominated URI to a downloadable HTTP(S) URL.
  *
- * - `ipfs://` locations are rewritten using the provided `ipfsGatewayUrl`.
- * - `https://` locations are returned as-is (they are already downloadable).
+ * - `ipfs://` URIs are rewritten using the provided `ipfsGatewayUrl`.
+ * - `https://` URIs are returned as-is (they are already downloadable).
  */
 export function getDownloadUrl(
-  location: string,
+  uri: string,
   ipfsGatewayUrl?: string,
 ): string {
-  if (location.startsWith('ipfs://')) {
+  if (uri.startsWith('ipfs://')) {
     if (!ipfsGatewayUrl) {
       throw new AclClientError(
         AclError.StorageFetchFailed,
-        'An IPFS gateway URL is required to resolve ipfs:// locations',
+        'An IPFS gateway URL is required to resolve ipfs:// URIs',
       )
     }
-    const cid = location.slice(7)
+    const cid = uri.slice(7)
     return `${ipfsGatewayUrl.replace(/\/$/, '')}/ipfs/${cid}`
   }
-  return location
+  return uri
 }

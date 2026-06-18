@@ -2,10 +2,10 @@ import type {
   AclClientConfig,
   AclDetail,
   AclMeta,
-  AdminCap,
   CreateAclResult,
   EntryMeta,
-  Role,
+  KeyspaceRole,
+  Principal,
   RotateAllResult,
   RotateResult,
   SignPersonalMessageFn,
@@ -13,20 +13,19 @@ import type {
 } from './types'
 import { AclClientError, AclError } from './errors'
 import {
-  addMemberTx,
+  createKeyspaceTx,
+  editDescriptionTx,
   editEntryTx,
+  grantTx,
   publishEntryTx,
-  removeMemberTx,
-  roleToAddress,
-  transferAdminCapTx,
+  revokeTx,
   updateEntryTx,
 } from './transactions'
 import {
-  fetchAccessibleAcls,
-  fetchAdminCaps,
-  fetchAllowListDetail,
-  fetchAllowListMeta,
+  fetchAccessibleKeyspaces,
   fetchEncryptedEntry,
+  fetchKeyspaceDetail,
+  fetchKeyspaceMeta,
 } from './queries'
 import { sealDecrypt, sealEncrypt } from './seal_helpers'
 
@@ -36,6 +35,7 @@ export class AclClient {
   private readonly packageId: string
   private readonly executor: AclClientConfig['executor']
   private readonly storageAdapter: AclClientConfig['storageAdapter']
+  private readonly defaultDaoId?: string
   private readonly indexerUrl?: string
   private readonly sessionKeyTtlMin: number
 
@@ -45,76 +45,56 @@ export class AclClient {
     this.packageId = config.packageId
     this.executor = config.executor
     this.storageAdapter = config.storageAdapter
+    this.defaultDaoId = config.daoId
     this.indexerUrl = config.indexerUrl
     this.sessionKeyTtlMin = config.sessionKeyTtlMin ?? 10
   }
 
-  // ── ACL Lifecycle ───────────────────────────────────────────────────────────
+  // ── Helpers ─────────────────────────────────────────────────────────────────
 
-  async createAcl(opts: {
-    name: string
-    initialRoles?: Role[]
-  }): Promise<CreateAclResult> {
-    // Build a single PTB: create_allowlist + optional add() calls
-    const { Transaction } = await import('@mysten/sui/transactions')
-    const tx = new Transaction()
+  private requireDaoId(override?: string): string {
+    const id = override ?? this.defaultDaoId
+    if (!id) {
+      throw new AclClientError(
+        AclError.DaoIdRequired,
+        'This operation requires a daoId. Pass it per-method or set daoId in AclClientConfig.',
+      )
+    }
+    return id
+  }
 
-    tx.moveCall({
-      target: `${this.packageId}::acl_encrypt::create_allowlist`,
-      arguments: [
-        tx.pure.vector('u8', Array.from(new TextEncoder().encode(opts.name))),
-      ],
-    })
+  // ── Keyspace lifecycle ──────────────────────────────────────────────────────
 
+  async createAcl(opts: { name: string }): Promise<CreateAclResult> {
+    const tx = createKeyspaceTx(this.packageId, opts.name)
     const result = await this.executor(tx)
     const changes = result.objectChanges ?? []
 
-    const aclChange = changes.find(
-      (c) => c.type === 'created' && c.objectType.includes('::AllowList'),
+    const created = changes.find(
+      (c) =>
+        c.type === 'created' &&
+        c.objectType.includes('::keyspace::Keyspace'),
     )
-    const capChange = changes.find(
-      (c) => c.type === 'created' && c.objectType.includes('::AdminCap'),
-    )
-
-    if (!aclChange || !capChange) {
+    if (!created) {
       throw new AclClientError(
         AclError.UnexpectedResponse,
-        'createAcl: expected AllowList and AdminCap in objectChanges. Ensure executor returns showObjectChanges: true.',
+        'createAcl: expected Keyspace in objectChanges. Ensure executor returns showObjectChanges: true.',
       )
     }
 
-    const aclId = aclChange.objectId
-    const adminCapId = capChange.objectId
-
-    // Add initial roles in separate transactions (create_allowlist doesn't accept them atomically
-    // in the current contract — each add() requires the AdminCap to already be owned)
-    if (opts.initialRoles?.length) {
-      for (const role of opts.initialRoles) {
-        await this.addRole({ aclId, adminCapId, role })
-      }
-    }
-
-    const meta = await this.getAcl(aclId)
-    return { aclId, adminCapId, epoch: meta?.epoch ?? 0 }
+    const meta = await this.getAclMeta(created.objectId)
+    return { aclId: created.objectId, epoch: meta.epoch }
   }
 
   async getAcl(aclId: string): Promise<AclDetail> {
-    const detail = await fetchAllowListDetail(
-      this.suiClient,
-      this.packageId,
-      aclId,
-    )
+    const detail = await fetchKeyspaceDetail(this.suiClient, aclId)
     if (!detail) {
       throw new AclClientError(
         AclError.EntryNotFound,
-        `ACL not found: ${aclId}`,
+        `Keyspace not found: ${aclId}`,
       )
     }
     return detail
-  }
-
-  async getOwnedAcls(address: string): Promise<AdminCap[]> {
-    return fetchAdminCaps(this.suiClient, this.packageId, address)
   }
 
   async getAccessibleAcls(address: string): Promise<string[]> {
@@ -124,59 +104,94 @@ export class AclClient {
         'getAccessibleAcls requires an indexerUrl in AclClient config',
       )
     }
-    return fetchAccessibleAcls(this.indexerUrl, address)
+    return fetchAccessibleKeyspaces(this.indexerUrl, address)
   }
 
-  // ── Role Management ─────────────────────────────────────────────────────────
+  // ── Role management ─────────────────────────────────────────────────────────
 
-  async addRole(opts: {
+  /**
+   * Grant `principal` the `keyspaceRole` on `aclId`.
+   * Caller must already hold the Grant role.
+   * `daoId` overrides the config-level default.
+   */
+  async grant(opts: {
     aclId: string
-    adminCapId: string
-    role: Role
+    keyspaceRole: KeyspaceRole
+    principal: Principal
+    daoId?: string
   }): Promise<{ epoch: number }> {
-    const grantee = roleToAddress(opts.role)
-    const tx = addMemberTx(this.packageId, opts.aclId, opts.adminCapId, grantee)
-    await this.executor(tx)
-    const meta = await this.getAclMeta(opts.aclId)
-    return { epoch: meta.epoch }
-  }
-
-  async removeRole(opts: {
-    aclId: string
-    adminCapId: string
-    role: Role
-  }): Promise<{ epoch: number }> {
-    const grantee = roleToAddress(opts.role)
-    const tx = removeMemberTx(
+    const daoId = this.requireDaoId(opts.daoId)
+    const tx = grantTx(
       this.packageId,
       opts.aclId,
-      opts.adminCapId,
-      grantee,
+      daoId,
+      opts.keyspaceRole,
+      opts.principal,
     )
     await this.executor(tx)
     const meta = await this.getAclMeta(opts.aclId)
     return { epoch: meta.epoch }
   }
 
-  async hasAccess(opts: { aclId: string; address: string }): Promise<boolean> {
-    const acl = await this.getAcl(opts.aclId)
-    if (acl.owner === opts.address) return true
-    return acl.roles.some(
-      (r) => r.type === 'address' && r.address === opts.address,
+  /**
+   * Revoke `principal` from `keyspaceRole` on `aclId`.
+   * Caller must hold the Grant role.
+   */
+  async revoke(opts: {
+    aclId: string
+    keyspaceRole: KeyspaceRole
+    principal: Principal
+    daoId?: string
+  }): Promise<{ epoch: number }> {
+    const daoId = this.requireDaoId(opts.daoId)
+    const tx = revokeTx(
+      this.packageId,
+      opts.aclId,
+      daoId,
+      opts.keyspaceRole,
+      opts.principal,
     )
+    await this.executor(tx)
+    const meta = await this.getAclMeta(opts.aclId)
+    return { epoch: meta.epoch }
   }
 
-  async resolveRoles(opts: {
+  /**
+   * Returns true if `address` holds Read access either directly as a player
+   * principal, or indirectly via an OU principal whose `daoId` is supplied.
+   * Pass `daoId` to check OU membership; omit to check player membership only.
+   */
+  async hasAccess(opts: {
     aclId: string
     address: string
-  }): Promise<Role[]> {
+    daoId?: string
+  }): Promise<boolean> {
     const acl = await this.getAcl(opts.aclId)
-    return acl.roles.filter(
-      (r) => r.type === 'address' && r.address === opts.address,
+    return acl.readPrincipals.some(
+      (p) =>
+        (p.type === 'player' && p.address === opts.address) ||
+        (p.type === 'ou' && opts.daoId !== undefined && p.daoId === opts.daoId),
     )
   }
 
-  // ── Data Operations ─────────────────────────────────────────────────────────
+  // ── Data operations ─────────────────────────────────────────────────────────
+
+  async editDescription(opts: {
+    aclId: string
+    entryId: string
+    newDescription: string
+    daoId?: string
+  }): Promise<void> {
+    const daoId = this.requireDaoId(opts.daoId)
+    const tx = editDescriptionTx(
+      this.packageId,
+      opts.aclId,
+      opts.entryId,
+      daoId,
+      opts.newDescription,
+    )
+    await this.executor(tx)
+  }
 
   async writeData(opts: {
     aclId: string
@@ -184,7 +199,9 @@ export class AclClient {
     description: string
     walletAddress: string
     signPersonalMessage: SignPersonalMessageFn
+    daoId?: string
   }): Promise<WriteResult> {
+    const daoId = this.requireDaoId(opts.daoId)
     const meta = await this.getAclMeta(opts.aclId)
 
     const data =
@@ -199,18 +216,21 @@ export class AclClient {
       data,
     )
 
-    const location = await this.storageAdapter.upload(encrypted)
+    const uri = await this.storageAdapter.upload(encrypted)
 
     const tx = publishEntryTx(
       this.packageId,
       opts.aclId,
-      location,
+      daoId,
+      uri,
       opts.description,
     )
     const result = await this.executor(tx)
 
     const entryChange = (result.objectChanges ?? []).find(
-      (c) => c.type === 'created' && c.objectType.includes('::EncryptedEntry'),
+      (c) =>
+        c.type === 'created' &&
+        c.objectType.includes('::keyspace::EncryptedEntry'),
     )
     if (!entryChange) {
       throw new AclClientError(
@@ -219,7 +239,7 @@ export class AclClient {
       )
     }
 
-    return { entryId: entryChange.objectId, location, epoch: meta.epoch }
+    return { entryId: entryChange.objectId, uri, epoch: meta.epoch }
   }
 
   async readData(opts: {
@@ -227,7 +247,9 @@ export class AclClient {
     entryId: string
     walletAddress: string
     signPersonalMessage: SignPersonalMessageFn
+    daoId?: string
   }): Promise<Uint8Array> {
+    const daoId = this.requireDaoId(opts.daoId)
     const meta = await this.getAclMeta(opts.aclId)
     const entry = await fetchEncryptedEntry(
       this.suiClient,
@@ -241,11 +263,12 @@ export class AclClient {
       )
     }
 
-    const encrypted = await this.storageAdapter.download(entry.location)
+    const encrypted = await this.storageAdapter.download(entry.uri)
 
     return sealDecrypt({
       packageId: this.packageId,
-      allowlistId: opts.aclId,
+      keyspaceId: opts.aclId,
+      daoId,
       encryptedData: encrypted,
       walletAddress: opts.walletAddress,
       signPersonalMessage: opts.signPersonalMessage,
@@ -261,7 +284,9 @@ export class AclClient {
     newPlaintext: Uint8Array | string
     walletAddress: string
     signPersonalMessage: SignPersonalMessageFn
+    daoId?: string
   }): Promise<WriteResult> {
+    const daoId = this.requireDaoId(opts.daoId)
     const meta = await this.getAclMeta(opts.aclId)
 
     const data =
@@ -276,12 +301,18 @@ export class AclClient {
       data,
     )
 
-    const location = await this.storageAdapter.upload(encrypted)
+    const uri = await this.storageAdapter.upload(encrypted)
 
-    const tx = editEntryTx(this.packageId, opts.aclId, opts.entryId, location)
+    const tx = editEntryTx(
+      this.packageId,
+      opts.aclId,
+      opts.entryId,
+      daoId,
+      uri,
+    )
     await this.executor(tx)
 
-    return { entryId: opts.entryId, location, epoch: meta.epoch }
+    return { entryId: opts.entryId, uri, epoch: meta.epoch }
   }
 
   async rotateEntry(opts: {
@@ -289,7 +320,9 @@ export class AclClient {
     entryId: string
     walletAddress: string
     signPersonalMessage: SignPersonalMessageFn
+    daoId?: string
   }): Promise<RotateResult> {
+    const daoId = this.requireDaoId(opts.daoId)
     const meta = await this.getAclMeta(opts.aclId)
     const entry = await fetchEncryptedEntry(
       this.suiClient,
@@ -309,15 +342,14 @@ export class AclClient {
       )
     }
 
-    // Decrypt with old policy (entry's epoch)
     const plaintext = await this.readData({
       aclId: opts.aclId,
       entryId: opts.entryId,
       walletAddress: opts.walletAddress,
       signPersonalMessage: opts.signPersonalMessage,
+      daoId,
     })
 
-    // Re-encrypt under current epoch policy
     const encrypted = await sealEncrypt(
       this.sealClient,
       this.packageId,
@@ -325,25 +357,28 @@ export class AclClient {
       plaintext,
     )
 
-    const newLocation = await this.storageAdapter.upload(encrypted)
+    const newUri = await this.storageAdapter.upload(encrypted)
 
     const tx = updateEntryTx(
       this.packageId,
       opts.aclId,
       opts.entryId,
-      newLocation,
+      daoId,
+      newUri,
     )
     await this.executor(tx)
 
-    return { newLocation, epoch: meta.epoch }
+    return { newUri, epoch: meta.epoch }
   }
 
   async rotateAllStaleEntries(opts: {
     aclId: string
     walletAddress: string
     signPersonalMessage: SignPersonalMessageFn
+    daoId?: string
     onProgress?: (done: number, total: number) => void
   }): Promise<RotateAllResult> {
+    this.requireDaoId(opts.daoId)
     const stale = await this.getStaleEntries(opts.aclId)
     let rotated = 0
     let skipped = 0
@@ -355,6 +390,7 @@ export class AclClient {
           entryId: entry.id,
           walletAddress: opts.walletAddress,
           signPersonalMessage: opts.signPersonalMessage,
+          daoId: opts.daoId,
         })
         rotated++
       } catch (e) {
@@ -373,7 +409,7 @@ export class AclClient {
     return { rotated, skipped }
   }
 
-  // ── Epoch & Staleness ───────────────────────────────────────────────────────
+  // ── Epoch & staleness ────────────────────────────────────────────────────────
 
   async getStaleEntries(aclId: string): Promise<EntryMeta[]> {
     const detail = await this.getAcl(aclId)
@@ -399,24 +435,14 @@ export class AclClient {
     return entry.isStale
   }
 
-  // ── Admin ───────────────────────────────────────────────────────────────────
-
-  async transferAdminCap(opts: {
-    adminCapId: string
-    newOwner: string
-  }): Promise<void> {
-    const tx = transferAdminCapTx(opts.adminCapId, opts.newOwner)
-    await this.executor(tx)
-  }
-
   // ── Internal helpers ────────────────────────────────────────────────────────
 
   private async getAclMeta(aclId: string): Promise<AclMeta> {
-    const meta = await fetchAllowListMeta(this.suiClient, aclId)
+    const meta = await fetchKeyspaceMeta(this.suiClient, aclId)
     if (!meta) {
       throw new AclClientError(
         AclError.EntryNotFound,
-        `ACL not found: ${aclId}`,
+        `Keyspace not found: ${aclId}`,
       )
     }
     return meta
