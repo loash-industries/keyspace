@@ -12,9 +12,12 @@ import { AclError, AclClientError } from '../src/errors'
 const ACL_ID = '0xacl001'
 const ENTRY_ID = '0xentry01'
 const OWNER = '0xowner'
-const MEMBER1 = '0x0000000000000000000000000000000000000000000000000000000000001001'
-const MEMBER2 = '0x0000000000000000000000000000000000000000000000000000000000001002'
-const DAO_ID = '0x0000000000000000000000000000000000000000000000000000000000002001'
+const MEMBER1 =
+  '0x0000000000000000000000000000000000000000000000000000000000001001'
+const MEMBER2 =
+  '0x0000000000000000000000000000000000000000000000000000000000001002'
+const DAO_ID =
+  '0x0000000000000000000000000000000000000000000000000000000000002001'
 
 function makeSuiClient(overrides: Record<string, jest.Mock> = {}) {
   return {
@@ -59,11 +62,14 @@ describe('fetchKeyspaceMeta', () => {
   it('returns AclMeta for a valid keyspace object', async () => {
     const client = makeSuiClient({
       getObject: (jest.fn() as any).mockResolvedValue(
-        moveObjectResponse(ACL_ID, makeKeyspaceFields({
-          name: 'My Keyspace',
-          version: 3,
-          entries: ['e1', 'e2'],
-        })),
+        moveObjectResponse(
+          ACL_ID,
+          makeKeyspaceFields({
+            name: 'My Keyspace',
+            version: 3,
+            entries: ['e1', 'e2'],
+          }),
+        ),
       ),
     })
     const result = await fetchKeyspaceMeta(client, ACL_ID)
@@ -107,11 +113,14 @@ describe('fetchKeyspaceDetail', () => {
   it('returns AclDetail with empty principals when acl is empty', async () => {
     const client = makeSuiClient({
       getObject: (jest.fn() as any).mockResolvedValue(
-        moveObjectResponse(ACL_ID, makeKeyspaceFields({
-          name: 'Shared ACL',
-          version: 2,
-          acl: { contents: [] },
-        })),
+        moveObjectResponse(
+          ACL_ID,
+          makeKeyspaceFields({
+            name: 'Shared ACL',
+            version: 2,
+            acl: { contents: [] },
+          }),
+        ),
       ),
       multiGetObjects: (jest.fn() as any).mockResolvedValue([]),
     })
@@ -129,20 +138,23 @@ describe('fetchKeyspaceDetail', () => {
   it('parses Player principals from acl.contents', async () => {
     const client = makeSuiClient({
       getObject: (jest.fn() as any).mockResolvedValue(
-        moveObjectResponse(ACL_ID, makeKeyspaceFields({
-          version: 1,
-          acl: {
-            contents: [
-              {
-                key: 'Read',
-                value: [
-                  { Player: { addr: MEMBER1 } },
-                  { Player: { addr: MEMBER2 } },
-                ],
-              },
-            ],
-          },
-        })),
+        moveObjectResponse(
+          ACL_ID,
+          makeKeyspaceFields({
+            version: 1,
+            acl: {
+              contents: [
+                {
+                  key: 'Read',
+                  value: [
+                    { Player: { addr: MEMBER1 } },
+                    { Player: { addr: MEMBER2 } },
+                  ],
+                },
+              ],
+            },
+          }),
+        ),
       ),
       multiGetObjects: (jest.fn() as any).mockResolvedValue([]),
     })
@@ -157,14 +169,15 @@ describe('fetchKeyspaceDetail', () => {
   it('parses Ou principals from acl.contents', async () => {
     const client = makeSuiClient({
       getObject: (jest.fn() as any).mockResolvedValue(
-        moveObjectResponse(ACL_ID, makeKeyspaceFields({
-          version: 1,
-          acl: {
-            contents: [
-              { key: 'Grant', value: [{ Ou: { dao_id: DAO_ID } }] },
-            ],
-          },
-        })),
+        moveObjectResponse(
+          ACL_ID,
+          makeKeyspaceFields({
+            version: 1,
+            acl: {
+              contents: [{ key: 'Grant', value: [{ Ou: { dao_id: DAO_ID } }] }],
+            },
+          }),
+        ),
       ),
       multiGetObjects: (jest.fn() as any).mockResolvedValue([]),
     })
@@ -175,10 +188,13 @@ describe('fetchKeyspaceDetail', () => {
   it('includes fetched entries in the detail', async () => {
     const client = makeSuiClient({
       getObject: (jest.fn() as any).mockResolvedValue(
-        moveObjectResponse(ACL_ID, makeKeyspaceFields({
-          version: 5,
-          entries: [ENTRY_ID],
-        })),
+        moveObjectResponse(
+          ACL_ID,
+          makeKeyspaceFields({
+            version: 5,
+            entries: [ENTRY_ID],
+          }),
+        ),
       ),
       multiGetObjects: (jest.fn() as any).mockResolvedValue([
         {
@@ -319,7 +335,9 @@ describe('fetchAccessibleKeyspaces', () => {
     await expect(fetchAccessibleKeyspaces(INDEXER, OWNER)).rejects.toThrow(
       AclClientError,
     )
-    await expect(fetchAccessibleKeyspaces(INDEXER, OWNER)).rejects.toMatchObject({
+    await expect(
+      fetchAccessibleKeyspaces(INDEXER, OWNER),
+    ).rejects.toMatchObject({
       code: AclError.UnexpectedResponse,
     })
   })

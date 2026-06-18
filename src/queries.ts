@@ -81,7 +81,9 @@ function parseRoleMap(aclContents: RawAclEntry[]): {
   let writePrincipals: Principal[] = []
 
   for (const entry of aclContents) {
-    const principals = parsePrincipals(Array.isArray(entry.value) ? entry.value : [])
+    const principals = parsePrincipals(
+      Array.isArray(entry.value) ? entry.value : [],
+    )
     if (entry.key === 'Grant') grantPrincipals = principals
     else if (entry.key === 'Read') readPrincipals = principals
     else if (entry.key === 'Write') writePrincipals = principals

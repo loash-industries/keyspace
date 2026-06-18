@@ -72,8 +72,7 @@ export class AclClient {
 
     const created = changes.find(
       (c) =>
-        c.type === 'created' &&
-        c.objectType.includes('::keyspace::Keyspace'),
+        c.type === 'created' && c.objectType.includes('::keyspace::Keyspace'),
     )
     if (!created) {
       throw new AclClientError(
@@ -303,13 +302,7 @@ export class AclClient {
 
     const uri = await this.storageAdapter.upload(encrypted)
 
-    const tx = editEntryTx(
-      this.packageId,
-      opts.aclId,
-      opts.entryId,
-      daoId,
-      uri,
-    )
+    const tx = editEntryTx(this.packageId, opts.aclId, opts.entryId, daoId, uri)
     await this.executor(tx)
 
     return { entryId: opts.entryId, uri, epoch: meta.epoch }

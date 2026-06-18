@@ -21,10 +21,14 @@ const PrincipalSchema = bcs.enum('Principal', {
 
 function encodeRole(role: KeyspaceRole) {
   switch (role) {
-    case 'Grant': return RoleSchema.serialize({ Grant: null })
-    case 'Read':  return RoleSchema.serialize({ Read: null })
-    case 'Write': return RoleSchema.serialize({ Write: null })
-    default: throw new Error(`Unknown KeyspaceRole: ${role satisfies never}`)
+    case 'Grant':
+      return RoleSchema.serialize({ Grant: null })
+    case 'Read':
+      return RoleSchema.serialize({ Read: null })
+    case 'Write':
+      return RoleSchema.serialize({ Write: null })
+    default:
+      throw new Error(`Unknown KeyspaceRole: ${role satisfies never}`)
   }
 }
 

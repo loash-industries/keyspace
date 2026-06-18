@@ -146,9 +146,7 @@ export class ObjectStoreStorageAdapter implements StorageAdapter {
 
   async download(uri: string): Promise<Uint8Array> {
     const prefix = `${this.baseUrl}/`
-    const key = uri.startsWith(prefix)
-      ? uri.slice(prefix.length)
-      : uri
+    const key = uri.startsWith(prefix) ? uri.slice(prefix.length) : uri
     try {
       return await this.client.get(this.bucket, key)
     } catch (err) {
@@ -291,10 +289,7 @@ export class S3ObjectStoreClient implements ObjectStoreClient {
  * - `ipfs://` URIs are rewritten using the provided `ipfsGatewayUrl`.
  * - `https://` URIs are returned as-is (they are already downloadable).
  */
-export function getDownloadUrl(
-  uri: string,
-  ipfsGatewayUrl?: string,
-): string {
+export function getDownloadUrl(uri: string, ipfsGatewayUrl?: string): string {
   if (uri.startsWith('ipfs://')) {
     if (!ipfsGatewayUrl) {
       throw new AclClientError(
