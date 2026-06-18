@@ -1,8 +1,37 @@
 {
   "branches": ["main"],
   "plugins": [
-    ["@semantic-release/commit-analyzer", { "preset": "conventionalcommits" }],
-    ["@semantic-release/release-notes-generator", { "preset": "conventionalcommits" }],
+    [
+      "@semantic-release/commit-analyzer",
+      {
+        "preset": "conventionalcommits",
+        "parserOpts": {
+          "headerPattern": "^(\\w*)(?:\\((.*)\\))?!?: (.*)$",
+          "headerCorrespondence": ["type", "scope", "subject"],
+          "noteKeywords": ["BREAKING CHANGE", "BREAKING-CHANGE"],
+          "breakingHeaderPattern": "^(\\w*)(?:\\((.*)\\))?!: (.*)$"
+        },
+        "releaseRules": [
+          { "breaking": true, "release": "major" },
+          { "revert": true, "release": "patch" },
+          { "type": "feat", "release": "minor" },
+          { "type": "fix", "release": "patch" },
+          { "type": "perf", "release": "patch" }
+        ]
+      }
+    ],
+    [
+      "@semantic-release/release-notes-generator",
+      {
+        "preset": "conventionalcommits",
+        "parserOpts": {
+          "headerPattern": "^(\\w*)(?:\\((.*)\\))?!?: (.*)$",
+          "headerCorrespondence": ["type", "scope", "subject"],
+          "noteKeywords": ["BREAKING CHANGE", "BREAKING-CHANGE"],
+          "breakingHeaderPattern": "^(\\w*)(?:\\((.*)\\))?!: (.*)$"
+        }
+      }
+    ],
     "@semantic-release/changelog",
     [
       "@semantic-release/npm",
