@@ -1,29 +1,49 @@
 import type { Transaction } from '@mysten/sui/transactions'
 
-// ── Role ─────────────────────────────────────────────────────────────────────
+// ── Principal ─────────────────────────────────────────────────────────────────
+// Mirrors armature_vault::acl::Principal
 
-export type Role =
-  | { type: 'address'; address: string }
-  | { type: 'tribe'; tribeId: string }
+export type Principal =
+  | { type: 'player'; address: string }
+  | { type: 'ou'; daoId: string }
 
-// ── ACL state ─────────────────────────────────────────────────────────────────
+/** @deprecated Use Principal */
+export type Role = Principal
+
+// ── Keyspace role ─────────────────────────────────────────────────────────────
+// Mirrors armature_vault::keyspace::Role
+
+export type KeyspaceRole = 'Grant' | 'Read' | 'Write'
+
+// ── Keyspace state ────────────────────────────────────────────────────────────
 
 export interface AclMeta {
   id: string
-  owner: string
   name: string
+  /** Incremented when the Read membership set changes (= on-chain `version`). */
   epoch: number
   entryCount: number
 }
 
 export interface AclDetail extends AclMeta {
-  roles: Role[]
+  /** Principals that hold the Grant role (can manage membership). */
+  grantPrincipals: Principal[]
+  /** Principals that hold the Read role (can decrypt entries). */
+  readPrincipals: Principal[]
+  /** Principals that hold the Write role (can publish/edit entries). */
+  writePrincipals: Principal[]
+  /**
+   * Backwards-compat alias for readPrincipals — "members who can decrypt".
+   * Use readPrincipals / grantPrincipals / writePrincipals for new code.
+   */
+  roles: Principal[]
   entries: EntryMeta[]
 }
 
 export interface EntryMeta {
   id: string
-  aclId: string
+  /** Object ID of the parent Keyspace. */
+  keyspaceId: string
   location: string
   description: string
   createdBy: string
@@ -31,16 +51,11 @@ export interface EntryMeta {
   isStale: boolean
 }
 
-export interface AdminCap {
-  id: string
-  aclId: string
-}
-
 // ── Operation results ─────────────────────────────────────────────────────────
 
 export interface CreateAclResult {
+  /** The Keyspace object ID. */
   aclId: string
-  adminCapId: string
   epoch: number
 }
 
@@ -78,12 +93,6 @@ export interface ExecuteResult {
  *
  * In a dapp-kit app:
  *   executor: (tx) => signAndExecuteTransaction({ transaction: tx, options: { showObjectChanges: true } })
- *
- * In a Node.js script:
- *   executor: async (tx) => {
- *     const result = await suiClient.signAndExecuteTransaction({ signer: keypair, transaction: tx });
- *     return result;
- *   }
  */
 export type TransactionExecutor = (tx: Transaction) => Promise<ExecuteResult>
 
@@ -92,18 +101,13 @@ export type TransactionExecutor = (tx: Transaction) => Promise<ExecuteResult>
 /**
  * Signs a personal message for Seal session key creation.
  * Returns the base64-encoded signature string.
- *
- * In a dapp-kit app:
- *   signPersonalMessage: (message) => new Promise((resolve, reject) =>
- *     dappKitSignFn({ message }, { onSuccess: r => resolve(r.signature), onError: reject })
- *   )
  */
 export type SignPersonalMessageFn = (message: Uint8Array) => Promise<string>
 
 // ── Storage ───────────────────────────────────────────────────────────────────
 
 export interface StorageAdapter {
-  upload(data: Uint8Array): Promise<string> // returns location (ipfs://... or https://...)
+  upload(data: Uint8Array): Promise<string>
   download(location: string): Promise<Uint8Array>
 }
 
@@ -116,12 +120,17 @@ export interface AclClientConfig {
   /** @mysten/seal SealClient instance (pre-configured with key servers) */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sealClient: any
-  /** Deployed Move package ID */
+  /** Published armature_vault package ID */
   packageId: string
   /** Signs and submits PTBs; must return objectChanges for mutation methods */
   executor: TransactionExecutor
   /** Encrypted blob storage backend */
   storageAdapter: StorageAdapter
+  /**
+   * Default DAO object ID to pass for operations that require `&DAO`.
+   * Can be overridden per-method. Required for grant/revoke/write/read ops.
+   */
+  daoId?: string
   /** REST indexer URL for getAccessibleAcls — optional */
   indexerUrl?: string
   /** Seal session key TTL in minutes (default: 10) */

@@ -13,11 +13,13 @@ export {
   LOCATIONS_SCHEMA_VERSION,
 } from './locations'
 export type {
+  Principal,
+  /** @deprecated Use Principal */
   Role,
+  KeyspaceRole,
   AclMeta,
   AclDetail,
   EntryMeta,
-  AdminCap,
   CreateAclResult,
   WriteResult,
   RotateResult,

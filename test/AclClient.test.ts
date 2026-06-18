@@ -9,22 +9,20 @@ import { AclError } from '../src/errors'
 
 // ── Mock functions (defined before unstable_mockModule calls) ─────────────────
 
-const mockFetchAdminCaps = jest.fn() as any
-const mockFetchAllowListMeta = jest.fn() as any
-const mockFetchAllowListDetail = jest.fn() as any
+const mockFetchKeyspaceMeta = jest.fn() as any
+const mockFetchKeyspaceDetail = jest.fn() as any
 const mockFetchEncryptedEntry = jest.fn() as any
-const mockFetchAccessibleAcls = jest.fn() as any
+const mockFetchAccessibleKeyspaces = jest.fn() as any
 const mockSealEncrypt = jest.fn() as any
 const mockSealDecrypt = jest.fn() as any
 
 // ── Module mocks (must precede dynamic imports) ────────────────────────────────
 
 jest.unstable_mockModule('../src/queries', () => ({
-  fetchAdminCaps: mockFetchAdminCaps,
-  fetchAllowListMeta: mockFetchAllowListMeta,
-  fetchAllowListDetail: mockFetchAllowListDetail,
+  fetchKeyspaceMeta: mockFetchKeyspaceMeta,
+  fetchKeyspaceDetail: mockFetchKeyspaceDetail,
   fetchEncryptedEntry: mockFetchEncryptedEntry,
-  fetchAccessibleAcls: mockFetchAccessibleAcls,
+  fetchAccessibleKeyspaces: mockFetchAccessibleKeyspaces,
 }))
 
 jest.unstable_mockModule('../src/seal_helpers', () => ({
@@ -42,7 +40,7 @@ const { AclClient } = await import('../src/AclClient')
 const PKG = '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef'
 const ACL_ID =
   '0x0000000000000000000000000000000000000000000000000000000000001001'
-const CAP_ID =
+const DAO_ID =
   '0x0000000000000000000000000000000000000000000000000000000000001002'
 const ENTRY_ID =
   '0x0000000000000000000000000000000000000000000000000000000000001003'
@@ -61,7 +59,6 @@ const ENCRYPTED = new Uint8Array([9, 8, 7])
 function makeAclMeta(overrides: Partial<AclMeta> = {}): AclMeta {
   return {
     id: ACL_ID,
-    owner: OWNER,
     name: 'Test ACL',
     epoch: 1,
     entryCount: 0,
@@ -72,6 +69,9 @@ function makeAclMeta(overrides: Partial<AclMeta> = {}): AclMeta {
 function makeAclDetail(overrides: Partial<AclDetail> = {}): AclDetail {
   return {
     ...makeAclMeta(),
+    grantPrincipals: [],
+    readPrincipals: [],
+    writePrincipals: [],
     roles: [],
     entries: [],
     ...overrides,
@@ -81,7 +81,7 @@ function makeAclDetail(overrides: Partial<AclDetail> = {}): AclDetail {
 function makeEntry(overrides: Partial<EntryMeta> = {}): EntryMeta {
   return {
     id: ENTRY_ID,
-    aclId: ACL_ID,
+    keyspaceId: ACL_ID,
     location: `ipfs://${CID}`,
     description: 'test entry',
     createdBy: OWNER,
@@ -112,6 +112,7 @@ function makeConfig(overrides: Partial<AclClientConfig> = {}): AclClientConfig {
     packageId: PKG,
     executor: makeExecutor(),
     storageAdapter: makeStorageAdapter(),
+    daoId: DAO_ID,
     ...overrides,
   }
 }
@@ -131,21 +132,20 @@ beforeEach(() => {
 describe('getAcl', () => {
   it('returns the ACL detail', async () => {
     const detail = makeAclDetail()
-    mockFetchAllowListDetail.mockResolvedValue(detail)
+    mockFetchKeyspaceDetail.mockResolvedValue(detail)
 
     const client = makeClient()
     const result = await client.getAcl(ACL_ID)
 
     expect(result).toBe(detail)
-    expect(mockFetchAllowListDetail).toHaveBeenCalledWith(
+    expect(mockFetchKeyspaceDetail).toHaveBeenCalledWith(
       expect.anything(),
-      PKG,
       ACL_ID,
     )
   })
 
   it('throws AclClientError(EntryNotFound) when ACL does not exist', async () => {
-    mockFetchAllowListDetail.mockResolvedValue(null)
+    mockFetchKeyspaceDetail.mockResolvedValue(null)
 
     const client = makeClient()
     await expect(client.getAcl(ACL_ID)).rejects.toMatchObject({
@@ -154,58 +154,36 @@ describe('getAcl', () => {
   })
 })
 
-// ── getOwnedAcls ──────────────────────────────────────────────────────────────
-
-describe('getOwnedAcls', () => {
-  it('delegates to fetchAdminCaps and returns the result', async () => {
-    const caps = [{ id: CAP_ID, aclId: ACL_ID }]
-    mockFetchAdminCaps.mockResolvedValue(caps)
-
-    const client = makeClient()
-    const result = await client.getOwnedAcls(OWNER)
-
-    expect(result).toBe(caps)
-    expect(mockFetchAdminCaps).toHaveBeenCalledWith(
-      expect.anything(),
-      PKG,
-      OWNER,
-    )
-  })
-})
-
 // ── getAccessibleAcls ─────────────────────────────────────────────────────────
 
 describe('getAccessibleAcls', () => {
   it('throws AclClientError(IndexerRequired) when indexerUrl is not configured', async () => {
-    const client = makeClient() // no indexerUrl
+    const client = makeClient({ indexerUrl: undefined })
     await expect(client.getAccessibleAcls(OWNER)).rejects.toMatchObject({
       code: AclError.IndexerRequired,
     })
   })
 
-  it('delegates to fetchAccessibleAcls when indexerUrl is configured', async () => {
-    mockFetchAccessibleAcls.mockResolvedValue(['0xacl1', '0xacl2'])
+  it('delegates to fetchAccessibleKeyspaces when indexerUrl is configured', async () => {
+    mockFetchAccessibleKeyspaces.mockResolvedValue(['0xacl1', '0xacl2'])
     const client = makeClient({ indexerUrl: INDEXER })
 
     const result = await client.getAccessibleAcls(OWNER)
 
     expect(result).toEqual(['0xacl1', '0xacl2'])
-    expect(mockFetchAccessibleAcls).toHaveBeenCalledWith(INDEXER, OWNER)
+    expect(mockFetchAccessibleKeyspaces).toHaveBeenCalledWith(INDEXER, OWNER)
   })
 })
 
 // ── hasAccess ─────────────────────────────────────────────────────────────────
 
 describe('hasAccess', () => {
-  it('returns true for the owner', async () => {
-    mockFetchAllowListDetail.mockResolvedValue(makeAclDetail({ owner: OWNER }))
-    const client = makeClient()
-    expect(await client.hasAccess({ aclId: ACL_ID, address: OWNER })).toBe(true)
-  })
-
-  it('returns true for a member in the role list', async () => {
-    mockFetchAllowListDetail.mockResolvedValue(
-      makeAclDetail({ roles: [{ type: 'address', address: MEMBER }] }),
+  it('returns true for a player in readPrincipals', async () => {
+    mockFetchKeyspaceDetail.mockResolvedValue(
+      makeAclDetail({
+        readPrincipals: [{ type: 'player', address: MEMBER }],
+        roles: [{ type: 'player', address: MEMBER }],
+      }),
     )
     const client = makeClient()
     expect(await client.hasAccess({ aclId: ACL_ID, address: MEMBER })).toBe(
@@ -213,8 +191,8 @@ describe('hasAccess', () => {
     )
   })
 
-  it('returns false for an address that has no role', async () => {
-    mockFetchAllowListDetail.mockResolvedValue(makeAclDetail())
+  it('returns false for an address not in readPrincipals', async () => {
+    mockFetchKeyspaceDetail.mockResolvedValue(makeAclDetail())
     const client = makeClient()
     expect(
       await client.hasAccess({ aclId: ACL_ID, address: '0xstranger' }),
@@ -222,61 +200,64 @@ describe('hasAccess', () => {
   })
 })
 
-// ── resolveRoles ──────────────────────────────────────────────────────────────
+// ── grant / revoke ────────────────────────────────────────────────────────────
 
-describe('resolveRoles', () => {
-  it('returns roles matching the address', async () => {
-    mockFetchAllowListDetail.mockResolvedValue(
-      makeAclDetail({
-        roles: [
-          { type: 'address', address: MEMBER },
-          { type: 'address', address: '0xother' },
-        ],
-      }),
-    )
-    const client = makeClient()
-    const roles = await client.resolveRoles({ aclId: ACL_ID, address: MEMBER })
-    expect(roles).toHaveLength(1)
-    expect(roles[0]).toEqual({ type: 'address', address: MEMBER })
-  })
-
-  it('returns an empty array when the address has no roles', async () => {
-    mockFetchAllowListDetail.mockResolvedValue(makeAclDetail())
-    const client = makeClient()
-    const roles = await client.resolveRoles({ aclId: ACL_ID, address: MEMBER })
-    expect(roles).toEqual([])
-  })
-})
-
-// ── addRole / removeRole ──────────────────────────────────────────────────────
-
-describe('addRole', () => {
+describe('grant', () => {
   it('executes a transaction and returns the new epoch', async () => {
     const executor = makeExecutor()
-    mockFetchAllowListMeta.mockResolvedValue(makeAclMeta({ epoch: 4 }))
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 4 }))
     const client = makeClient({ executor })
 
-    const result = await client.addRole({
+    const result = await client.grant({
       aclId: ACL_ID,
-      adminCapId: CAP_ID,
-      role: { type: 'address', address: MEMBER },
+      keyspaceRole: 'Read',
+      principal: { type: 'player', address: MEMBER },
     })
 
     expect(executor).toHaveBeenCalledTimes(1)
     expect(result).toEqual({ epoch: 4 })
   })
+
+  it('throws DaoIdRequired when no daoId is configured', async () => {
+    const client = makeClient({ daoId: undefined })
+    await expect(
+      client.grant({
+        aclId: ACL_ID,
+        keyspaceRole: 'Read',
+        principal: { type: 'player', address: MEMBER },
+      }),
+    ).rejects.toMatchObject({ code: AclError.DaoIdRequired })
+  })
+
+  it('uses per-method daoId override', async () => {
+    const executor = makeExecutor()
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 2 }))
+    const OVERRIDE_DAO =
+      '0x0000000000000000000000000000000000000000000000000000000000009999'
+    const client = makeClient({ executor, daoId: undefined })
+
+    const result = await client.grant({
+      aclId: ACL_ID,
+      keyspaceRole: 'Write',
+      principal: { type: 'player', address: MEMBER },
+      daoId: OVERRIDE_DAO,
+    })
+
+    expect(executor).toHaveBeenCalledTimes(1)
+    expect(result).toEqual({ epoch: 2 })
+  })
 })
 
-describe('removeRole', () => {
+describe('revoke', () => {
   it('executes a transaction and returns the new epoch', async () => {
     const executor = makeExecutor()
-    mockFetchAllowListMeta.mockResolvedValue(makeAclMeta({ epoch: 5 }))
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 5 }))
     const client = makeClient({ executor })
 
-    const result = await client.removeRole({
+    const result = await client.revoke({
       aclId: ACL_ID,
-      adminCapId: CAP_ID,
-      role: { type: 'address', address: MEMBER },
+      keyspaceRole: 'Read',
+      principal: { type: 'player', address: MEMBER },
     })
 
     expect(executor).toHaveBeenCalledTimes(1)
@@ -287,7 +268,7 @@ describe('removeRole', () => {
 // ── createAcl ─────────────────────────────────────────────────────────────────
 
 describe('createAcl', () => {
-  it('throws UnexpectedResponse when objectChanges lacks AllowList or AdminCap', async () => {
+  it('throws UnexpectedResponse when objectChanges lacks a Keyspace', async () => {
     const executor = (jest.fn() as any).mockResolvedValue({
       digest: '0xd',
       objectChanges: [],
@@ -299,61 +280,24 @@ describe('createAcl', () => {
     })
   })
 
-  it('creates an ACL and returns aclId, adminCapId, and epoch', async () => {
+  it('creates an ACL and returns aclId and epoch', async () => {
     const executor = (jest.fn() as any).mockResolvedValue({
       digest: '0xd',
       objectChanges: [
         {
           type: 'created',
           objectId: ACL_ID,
-          objectType: '0xpkg::acl_encrypt::AllowList',
-        },
-        {
-          type: 'created',
-          objectId: CAP_ID,
-          objectType: '0xpkg::acl_encrypt::AdminCap',
+          objectType: `${PKG}::keyspace::Keyspace`,
         },
       ],
     })
-    mockFetchAllowListDetail.mockResolvedValue(makeAclDetail({ epoch: 0 }))
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 0 }))
     const client = makeClient({ executor })
 
     const result = await client.createAcl({ name: 'My ACL' })
 
     expect(result.aclId).toBe(ACL_ID)
-    expect(result.adminCapId).toBe(CAP_ID)
     expect(result.epoch).toBe(0)
-  })
-
-  it('adds initial roles after creating the ACL', async () => {
-    const executor = (jest.fn() as any)
-      .mockResolvedValueOnce({
-        digest: '0xd',
-        objectChanges: [
-          {
-            type: 'created',
-            objectId: ACL_ID,
-            objectType: '0xpkg::acl_encrypt::AllowList',
-          },
-          {
-            type: 'created',
-            objectId: CAP_ID,
-            objectType: '0xpkg::acl_encrypt::AdminCap',
-          },
-        ],
-      })
-      .mockResolvedValue({ digest: '0xd2', objectChanges: [] }) // for addRole tx
-
-    mockFetchAllowListMeta.mockResolvedValue(makeAclMeta({ epoch: 0 }))
-    const client = makeClient({ executor })
-
-    await client.createAcl({
-      name: 'My ACL',
-      initialRoles: [{ type: 'address', address: MEMBER }],
-    })
-
-    // Called once for createAcl, once for addRole
-    expect(executor).toHaveBeenCalledTimes(2)
   })
 })
 
@@ -369,12 +313,12 @@ describe('writeData', () => {
         {
           type: 'created',
           objectId: ENTRY_ID,
-          objectType: '0xpkg::acl_encrypt::EncryptedEntry',
+          objectType: `${PKG}::keyspace::EncryptedEntry`,
         },
       ],
     })
     const storageAdapter = makeStorageAdapter()
-    mockFetchAllowListMeta.mockResolvedValue(makeAclMeta({ epoch: 2 }))
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 2 }))
     mockSealEncrypt.mockResolvedValue(ENCRYPTED)
 
     const client = makeClient({ executor, storageAdapter })
@@ -401,18 +345,18 @@ describe('writeData', () => {
     })
   })
 
-  it('accepts plaintext as a string', async () => {
+  it('accepts string plaintext and converts to Uint8Array', async () => {
     const executor = (jest.fn() as any).mockResolvedValue({
       digest: '0xd',
       objectChanges: [
         {
           type: 'created',
           objectId: ENTRY_ID,
-          objectType: '0xpkg::acl_encrypt::EncryptedEntry',
+          objectType: `${PKG}::keyspace::EncryptedEntry`,
         },
       ],
     })
-    mockFetchAllowListMeta.mockResolvedValue(makeAclMeta())
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta())
     mockSealEncrypt.mockResolvedValue(ENCRYPTED)
 
     const client = makeClient({ executor })
@@ -434,7 +378,7 @@ describe('writeData', () => {
       digest: '0xd',
       objectChanges: [],
     })
-    mockFetchAllowListMeta.mockResolvedValue(makeAclMeta())
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta())
     mockSealEncrypt.mockResolvedValue(ENCRYPTED)
 
     const client = makeClient({ executor })
@@ -457,7 +401,7 @@ describe('readData', () => {
 
   it('downloads and decrypts an entry', async () => {
     const storageAdapter = makeStorageAdapter()
-    mockFetchAllowListMeta.mockResolvedValue(makeAclMeta({ epoch: 1 }))
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 1 }))
     mockFetchEncryptedEntry.mockResolvedValue(makeEntry())
     mockSealDecrypt.mockResolvedValue(PLAINTEXT)
 
@@ -473,7 +417,7 @@ describe('readData', () => {
     expect(mockSealDecrypt).toHaveBeenCalledWith(
       expect.objectContaining({
         packageId: PKG,
-        allowlistId: ACL_ID,
+        keyspaceId: ACL_ID,
         encryptedData: ENCRYPTED,
         walletAddress: OWNER,
       }),
@@ -482,7 +426,7 @@ describe('readData', () => {
   })
 
   it('throws AclClientError(EntryNotFound) when entry does not exist', async () => {
-    mockFetchAllowListMeta.mockResolvedValue(makeAclMeta())
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta())
     mockFetchEncryptedEntry.mockResolvedValue(null)
 
     const client = makeClient()
@@ -505,7 +449,7 @@ describe('editData', () => {
   it('re-encrypts, uploads, and edits the entry', async () => {
     const executor = makeExecutor()
     const storageAdapter = makeStorageAdapter()
-    mockFetchAllowListMeta.mockResolvedValue(makeAclMeta({ epoch: 3 }))
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 3 }))
     mockSealEncrypt.mockResolvedValue(ENCRYPTED)
 
     const client = makeClient({ executor, storageAdapter })
@@ -539,7 +483,7 @@ describe('getStaleEntries', () => {
   it('returns only entries where isStale is true', async () => {
     const staleEntry = makeEntry({ id: '0xstale', isStale: true })
     const freshEntry = makeEntry({ id: '0xfresh', isStale: false })
-    mockFetchAllowListDetail.mockResolvedValue(
+    mockFetchKeyspaceDetail.mockResolvedValue(
       makeAclDetail({ entries: [staleEntry, freshEntry] }),
     )
 
@@ -551,7 +495,7 @@ describe('getStaleEntries', () => {
   })
 
   it('returns an empty array when all entries are fresh', async () => {
-    mockFetchAllowListDetail.mockResolvedValue(
+    mockFetchKeyspaceDetail.mockResolvedValue(
       makeAclDetail({ entries: [makeEntry({ isStale: false })] }),
     )
 
@@ -564,7 +508,7 @@ describe('getStaleEntries', () => {
 
 describe('isEntryStale', () => {
   it('returns true for a stale entry', async () => {
-    mockFetchAllowListMeta.mockResolvedValue(makeAclMeta({ epoch: 5 }))
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 5 }))
     mockFetchEncryptedEntry.mockResolvedValue(makeEntry({ isStale: true }))
 
     const client = makeClient()
@@ -574,7 +518,7 @@ describe('isEntryStale', () => {
   })
 
   it('returns false for a fresh entry', async () => {
-    mockFetchAllowListMeta.mockResolvedValue(makeAclMeta({ epoch: 5 }))
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 5 }))
     mockFetchEncryptedEntry.mockResolvedValue(makeEntry({ isStale: false }))
 
     const client = makeClient()
@@ -584,7 +528,7 @@ describe('isEntryStale', () => {
   })
 
   it('throws AclClientError(EntryNotFound) when entry does not exist', async () => {
-    mockFetchAllowListMeta.mockResolvedValue(makeAclMeta())
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta())
     mockFetchEncryptedEntry.mockResolvedValue(null)
 
     const client = makeClient()
@@ -602,7 +546,7 @@ describe('rotateEntry', () => {
   const signPersonalMessage = (jest.fn() as any).mockResolvedValue('sig')
 
   it('throws AclClientError(EntryNotFound) when entry does not exist', async () => {
-    mockFetchAllowListMeta.mockResolvedValue(makeAclMeta())
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta())
     mockFetchEncryptedEntry.mockResolvedValue(null)
 
     const client = makeClient()
@@ -617,7 +561,7 @@ describe('rotateEntry', () => {
   })
 
   it('throws AclClientError(AlreadyCurrentEpoch) when entry is not stale', async () => {
-    mockFetchAllowListMeta.mockResolvedValue(makeAclMeta({ epoch: 2 }))
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 2 }))
     mockFetchEncryptedEntry.mockResolvedValue(makeEntry({ isStale: false }))
 
     const client = makeClient()
@@ -636,10 +580,10 @@ describe('rotateEntry', () => {
     const storageAdapter = makeStorageAdapter()
     const newCid = 'QmNewCid'
 
-    mockFetchAllowListMeta.mockResolvedValue(makeAclMeta({ epoch: 3 }))
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 3 }))
     mockFetchEncryptedEntry
-      .mockResolvedValueOnce(makeEntry({ isStale: true })) // first call in rotateEntry
-      .mockResolvedValueOnce(makeEntry({ isStale: true })) // second call inside readData
+      .mockResolvedValueOnce(makeEntry({ isStale: true }))
+      .mockResolvedValueOnce(makeEntry({ isStale: true }))
     mockSealDecrypt.mockResolvedValue(PLAINTEXT)
     mockSealEncrypt.mockResolvedValue(ENCRYPTED)
     storageAdapter.upload.mockResolvedValue(`ipfs://${newCid}`)
@@ -665,7 +609,7 @@ describe('rotateAllStaleEntries', () => {
   const signPersonalMessage = (jest.fn() as any).mockResolvedValue('sig')
 
   it('returns rotated=0 and skipped=0 when there are no stale entries', async () => {
-    mockFetchAllowListDetail.mockResolvedValue(makeAclDetail({ entries: [] }))
+    mockFetchKeyspaceDetail.mockResolvedValue(makeAclDetail({ entries: [] }))
 
     const client = makeClient()
     const result = await client.rotateAllStaleEntries({
@@ -680,10 +624,10 @@ describe('rotateAllStaleEntries', () => {
   it('calls onProgress with running totals', async () => {
     const stale1 = makeEntry({ id: '0xe1', isStale: true })
     const stale2 = makeEntry({ id: '0xe2', isStale: true })
-    mockFetchAllowListDetail.mockResolvedValue(
+    mockFetchKeyspaceDetail.mockResolvedValue(
       makeAclDetail({ entries: [stale1, stale2] }),
     )
-    mockFetchAllowListMeta.mockResolvedValue(makeAclMeta({ epoch: 2 }))
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 2 }))
     mockFetchEncryptedEntry.mockResolvedValue(makeEntry({ isStale: true }))
     mockSealDecrypt.mockResolvedValue(PLAINTEXT)
     mockSealEncrypt.mockResolvedValue(ENCRYPTED)
@@ -700,18 +644,5 @@ describe('rotateAllStaleEntries', () => {
     expect(onProgress).toHaveBeenCalledTimes(2)
     expect(onProgress).toHaveBeenNthCalledWith(1, 1, 2)
     expect(onProgress).toHaveBeenNthCalledWith(2, 2, 2)
-  })
-})
-
-// ── transferAdminCap ──────────────────────────────────────────────────────────
-
-describe('transferAdminCap', () => {
-  it('executes a transfer transaction', async () => {
-    const executor = makeExecutor()
-    const client = makeClient({ executor })
-
-    await client.transferAdminCap({ adminCapId: CAP_ID, newOwner: MEMBER })
-
-    expect(executor).toHaveBeenCalledTimes(1)
   })
 })
