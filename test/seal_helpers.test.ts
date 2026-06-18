@@ -1,4 +1,11 @@
-import { jest, describe, it, expect, beforeEach, afterEach } from '@jest/globals'
+import {
+  jest,
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+} from '@jest/globals'
 
 // ── Mock @mysten/seal ──────────────────────────────────────────────────────────
 
@@ -30,7 +37,9 @@ jest.unstable_mockModule('@mysten/seal', () => ({
 const mockMoveCall = jest.fn()
 const mockPureVector = jest.fn().mockReturnValue('pureVectorArg')
 const mockTxObject = jest.fn().mockReturnValue('objectArg')
-const mockBuild = (jest.fn() as any).mockResolvedValue(new Uint8Array([9, 9, 9]))
+const mockBuild = (jest.fn() as any).mockResolvedValue(
+  new Uint8Array([9, 9, 9]),
+)
 
 jest.unstable_mockModule('@mysten/sui/transactions', () => ({
   Transaction: jest.fn().mockImplementation(() => ({
@@ -43,15 +52,13 @@ jest.unstable_mockModule('@mysten/sui/transactions', () => ({
 
 // ── Dynamic imports (after mock registration) ─────────────────────────────────
 
-const { sealEncrypt, sealDecrypt, clearSessionCache } = await import(
-  '../src/seal_helpers'
-)
+const { sealEncrypt, sealDecrypt, clearSessionCache } =
+  await import('../src/seal_helpers')
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 // Valid 32-byte Sui object IDs (0x + 64 hex chars)
-const PKG =
-  '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef'
+const PKG = '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef'
 const KEYSPACE_ID =
   '0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20'
 const DAO_ID =
@@ -66,7 +73,9 @@ const ENCRYPTED = new Uint8Array([99, 88, 77])
 
 function makeSealClient(overrides: Record<string, any> = {}) {
   return {
-    encrypt: (jest.fn() as any).mockResolvedValue({ encryptedObject: ENCRYPTED }),
+    encrypt: (jest.fn() as any).mockResolvedValue({
+      encryptedObject: ENCRYPTED,
+    }),
     decrypt: (jest.fn() as any).mockResolvedValue(PLAINTEXT),
     ...overrides,
   }

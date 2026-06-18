@@ -1,4 +1,4 @@
-import { jest, describe, it, expect, beforeEach } from '@jest/globals'
+import { jest, describe, it, expect } from '@jest/globals'
 import {
   LocationsClient,
   LOCATIONS_SCHEMA_NAME,
@@ -6,6 +6,7 @@ import {
   type LocationsDocument,
   type Location,
 } from '../src/locations'
+import type { AclClient } from '../src/AclClient'
 import { AclError } from '../src/errors'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -53,16 +54,27 @@ function encodeDoc(doc: LocationsDocument): Uint8Array {
 function makeAclClient(overrides: Record<string, any> = {}) {
   return {
     readData: jest.fn() as any,
-    editData: (jest.fn() as any).mockResolvedValue({ entryId: ENTRY_ID, uri: 'ipfs://cid', epoch: 1 }),
-    writeData: (jest.fn() as any).mockResolvedValue({ entryId: ENTRY_ID, uri: 'ipfs://cid', epoch: 1 }),
-    rotateEntry: (jest.fn() as any).mockResolvedValue({ newUri: 'ipfs://new', epoch: 2 }),
+    editData: (jest.fn() as any).mockResolvedValue({
+      entryId: ENTRY_ID,
+      uri: 'ipfs://cid',
+      epoch: 1,
+    }),
+    writeData: (jest.fn() as any).mockResolvedValue({
+      entryId: ENTRY_ID,
+      uri: 'ipfs://cid',
+      epoch: 1,
+    }),
+    rotateEntry: (jest.fn() as any).mockResolvedValue({
+      newUri: 'ipfs://new',
+      epoch: 2,
+    }),
     ...overrides,
   }
 }
 
 function makeClient(aclClient = makeAclClient()) {
   return new LocationsClient({
-    aclClient,
+    aclClient: aclClient as unknown as AclClient,
     aclId: ACL_ID,
     entryId: ENTRY_ID,
     walletAddress: WALLET,
@@ -155,7 +167,9 @@ describe('addLocation', () => {
     })
     const client = makeClient(aclClient)
 
-    await expect(client.addLocation(makeLocation({ id: 'dup' }))).rejects.toMatchObject({
+    await expect(
+      client.addLocation(makeLocation({ id: 'dup' })),
+    ).rejects.toMatchObject({
       code: AclError.UnexpectedResponse,
     })
   })
@@ -164,7 +178,11 @@ describe('addLocation', () => {
     const doc = makeDoc()
     const aclClient = makeAclClient({
       readData: (jest.fn() as any).mockResolvedValue(encodeDoc(doc)),
-      editData: (jest.fn() as any).mockResolvedValue({ entryId: ENTRY_ID, uri: 'ipfs://x', epoch: 5 }),
+      editData: (jest.fn() as any).mockResolvedValue({
+        entryId: ENTRY_ID,
+        uri: 'ipfs://x',
+        epoch: 5,
+      }),
     })
     const client = makeClient(aclClient)
 
@@ -200,7 +218,9 @@ describe('updateLocation', () => {
     })
     const client = makeClient(aclClient)
 
-    await expect(client.updateLocation('missing', { description: 'x' })).rejects.toMatchObject({
+    await expect(
+      client.updateLocation('missing', { description: 'x' }),
+    ).rejects.toMatchObject({
       code: AclError.UnexpectedResponse,
     })
   })
@@ -261,7 +281,7 @@ describe('LocationsClient.create', () => {
   it('writes an empty document and returns a LocationsClient', async () => {
     const aclClient = makeAclClient()
     const client = await LocationsClient.create({
-      aclClient,
+      aclClient: aclClient as unknown as AclClient,
       aclId: ACL_ID,
       walletAddress: WALLET,
       signPersonalMessage: SIGN_FN,
@@ -279,10 +299,14 @@ describe('LocationsClient.create', () => {
 
   it('uses the entryId from writeData result', async () => {
     const aclClient = makeAclClient({
-      writeData: (jest.fn() as any).mockResolvedValue({ entryId: '0xnewentry', uri: 'ipfs://x', epoch: 0 }),
+      writeData: (jest.fn() as any).mockResolvedValue({
+        entryId: '0xnewentry',
+        uri: 'ipfs://x',
+        epoch: 0,
+      }),
     })
     const client = await LocationsClient.create({
-      aclClient,
+      aclClient: aclClient as unknown as AclClient,
       aclId: ACL_ID,
       walletAddress: WALLET,
       signPersonalMessage: SIGN_FN,
