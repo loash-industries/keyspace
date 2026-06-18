@@ -1,3 +1,11 @@
+## 2.0.0 (2026-06-18)
+
+* feat!: added in-line major release trigger ([fc37cfd](https://github.com/loash-industries/keyspace/commit/fc37cfd))
+
+### BREAKING CHANGE
+
+* added in-line major release trigger
+
 ## 1.2.0 (2026-06-18)
 
 * feat: allow for big version bumps ([9e21e8f](https://github.com/loash-industries/keyspace/commit/9e21e8f))
