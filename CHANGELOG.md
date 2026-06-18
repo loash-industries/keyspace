@@ -1,3 +1,7 @@
+## 2.1.0 (2026-06-18)
+
+* feat: added structure types to location data ([aa53326](https://github.com/loash-industries/keyspace/commit/aa53326))
+
 ## 2.0.0 (2026-06-18)
 
 * feat!: added in-line major release trigger ([fc37cfd](https://github.com/loash-industries/keyspace/commit/fc37cfd))

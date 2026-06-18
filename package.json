@@ -1,6 +1,6 @@
 {
   "name": "@trinaryex/keyspace",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "SDK for Triex ACL encrypted data sharing on Sui + Seal",
   "type": "module",
   "main": "dist/index.js",
