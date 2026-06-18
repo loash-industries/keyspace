@@ -29,6 +29,7 @@ function makeLocation(overrides: Partial<Location> = {}): Location {
     id: 'loc-1',
     solar_system: 'Sol',
     warp_in: '0,0,0',
+    structure_type: 'gate',
     description: 'Test location',
     ...overrides,
   }

@@ -9,6 +9,7 @@ export const LOCATIONS_SCHEMA_VERSION = 1 as const
 
 export interface Location {
   solar_system: string
+  structure_type: string
   warp_in: string
   description: string
   id: string
