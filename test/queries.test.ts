@@ -192,7 +192,9 @@ describe('fetchKeyspaceDetail', () => {
     })
     const result = await fetchKeyspaceDetail(client, ACL_ID)
     // Only the valid Player entry survives; unknown shapes are silently dropped
-    expect(result!.readPrincipals).toEqual([{ type: 'player', address: MEMBER1 }])
+    expect(result!.readPrincipals).toEqual([
+      { type: 'player', address: MEMBER1 },
+    ])
   })
 
   it('parses Write principals from acl.contents', async () => {

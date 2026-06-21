@@ -95,7 +95,14 @@ describe('transaction builders', () => {
 
 describe('createKeyspaceForDaoTx', () => {
   it('returns a transaction object with player grant principals', () => {
-    const tx = createKeyspaceForDaoTx(PKG, DAO, 'Org ACL', [playerPrincipal], [], [])
+    const tx = createKeyspaceForDaoTx(
+      PKG,
+      DAO,
+      'Org ACL',
+      [playerPrincipal],
+      [],
+      [],
+    )
     expect(tx).toBeTruthy()
     expect(typeof tx).toBe('object')
   })
@@ -114,7 +121,14 @@ describe('createKeyspaceForDaoTx', () => {
   })
 
   it('returns a transaction object when read and write lists are empty', () => {
-    const tx = createKeyspaceForDaoTx(PKG, DAO, 'Grant-only', [ouPrincipal], [], [])
+    const tx = createKeyspaceForDaoTx(
+      PKG,
+      DAO,
+      'Grant-only',
+      [ouPrincipal],
+      [],
+      [],
+    )
     expect(tx).toBeTruthy()
   })
 
