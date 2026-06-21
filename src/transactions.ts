@@ -48,13 +48,15 @@ function textBytes(s: string): number[] {
 }
 
 function encodePrincipals(principals: Principal[]) {
-  return bcs.vector(PrincipalSchema).serialize(
-    principals.map((p) =>
-      p.type === 'player'
-        ? { Player: { addr: fromHex(p.address) } }
-        : { Ou: { dao_id: fromHex(p.daoId) } },
-    ),
-  )
+  return bcs
+    .vector(PrincipalSchema)
+    .serialize(
+      principals.map((p) =>
+        p.type === 'player'
+          ? { Player: { addr: fromHex(p.address) } }
+          : { Ou: { dao_id: fromHex(p.daoId) } },
+      ),
+    )
 }
 
 // ── Transactions ──────────────────────────────────────────────────────────────
