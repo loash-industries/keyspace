@@ -166,6 +166,59 @@ describe('fetchKeyspaceDetail', () => {
     expect(result!.roles).toEqual(result!.readPrincipals)
   })
 
+  it('ignores unrecognised principal shapes in acl.contents', async () => {
+    const client = makeSuiClient({
+      getObject: (jest.fn() as any).mockResolvedValue(
+        moveObjectResponse(
+          ACL_ID,
+          makeKeyspaceFields({
+            acl: {
+              contents: [
+                {
+                  key: 'Read',
+                  value: [
+                    { UnknownVariant: {} },
+                    null,
+                    42,
+                    { Player: { addr: MEMBER1 } },
+                  ],
+                },
+              ],
+            },
+          }),
+        ),
+      ),
+      multiGetObjects: (jest.fn() as any).mockResolvedValue([]),
+    })
+    const result = await fetchKeyspaceDetail(client, ACL_ID)
+    // Only the valid Player entry survives; unknown shapes are silently dropped
+    expect(result!.readPrincipals).toEqual([{ type: 'player', address: MEMBER1 }])
+  })
+
+  it('parses Write principals from acl.contents', async () => {
+    const client = makeSuiClient({
+      getObject: (jest.fn() as any).mockResolvedValue(
+        moveObjectResponse(
+          ACL_ID,
+          makeKeyspaceFields({
+            acl: {
+              contents: [
+                { key: 'Write', value: [{ Player: { addr: MEMBER1 } }] },
+              ],
+            },
+          }),
+        ),
+      ),
+      multiGetObjects: (jest.fn() as any).mockResolvedValue([]),
+    })
+    const result = await fetchKeyspaceDetail(client, ACL_ID)
+    expect(result!.writePrincipals).toEqual([
+      { type: 'player', address: MEMBER1 },
+    ])
+    expect(result!.readPrincipals).toEqual([])
+    expect(result!.grantPrincipals).toEqual([])
+  })
+
   it('parses Ou principals from acl.contents', async () => {
     const client = makeSuiClient({
       getObject: (jest.fn() as any).mockResolvedValue(

@@ -1,5 +1,6 @@
 import {
   createKeyspaceTx,
+  createKeyspaceForDaoTx,
   grantTx,
   revokeTx,
   publishEntryTx,
@@ -82,6 +83,56 @@ describe('transaction builders', () => {
   it('each builder returns a distinct transaction instance', () => {
     const tx1 = grantTx(PKG, ACL, DAO, 'Read', playerPrincipal)
     const tx2 = grantTx(PKG, ACL, DAO, 'Read', playerPrincipal)
+    expect(tx1).not.toBe(tx2)
+  })
+
+  it('grantTx throws for an unknown role value', () => {
+    expect(() =>
+      grantTx(PKG, ACL, DAO, 'Unknown' as any, playerPrincipal),
+    ).toThrow('Unknown KeyspaceRole: Unknown')
+  })
+})
+
+describe('createKeyspaceForDaoTx', () => {
+  it('returns a transaction object with player grant principals', () => {
+    const tx = createKeyspaceForDaoTx(PKG, DAO, 'Org ACL', [playerPrincipal], [], [])
+    expect(tx).toBeTruthy()
+    expect(typeof tx).toBe('object')
+  })
+
+  it('returns a transaction object with ou principals across all roles', () => {
+    const tx = createKeyspaceForDaoTx(
+      PKG,
+      DAO,
+      'Org ACL',
+      [ouPrincipal],
+      [ouPrincipal],
+      [ouPrincipal],
+    )
+    expect(tx).toBeTruthy()
+    expect(typeof tx).toBe('object')
+  })
+
+  it('returns a transaction object when read and write lists are empty', () => {
+    const tx = createKeyspaceForDaoTx(PKG, DAO, 'Grant-only', [ouPrincipal], [], [])
+    expect(tx).toBeTruthy()
+  })
+
+  it('encodes mixed player and ou principals in the same list', () => {
+    const tx = createKeyspaceForDaoTx(
+      PKG,
+      DAO,
+      'Mixed',
+      [playerPrincipal, ouPrincipal],
+      [],
+      [],
+    )
+    expect(tx).toBeTruthy()
+  })
+
+  it('returns a distinct transaction instance per call', () => {
+    const tx1 = createKeyspaceForDaoTx(PKG, DAO, 'A', [ouPrincipal], [], [])
+    const tx2 = createKeyspaceForDaoTx(PKG, DAO, 'A', [ouPrincipal], [], [])
     expect(tx1).not.toBe(tx2)
   })
 })

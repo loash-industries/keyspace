@@ -4,6 +4,7 @@ import type {
   AclDetail,
   AclMeta,
   EntryMeta,
+  Principal,
 } from '../src/types'
 import { AclError } from '../src/errors'
 
@@ -291,6 +292,22 @@ describe('revoke', () => {
   })
 })
 
+// ── getAclMeta (null branch) ──────────────────────────────────────────────────
+
+describe('getAclMeta null branch', () => {
+  it('throws EntryNotFound when fetchKeyspaceMeta returns null', async () => {
+    mockFetchKeyspaceMeta.mockResolvedValue(null)
+    const client = makeClient()
+    await expect(
+      client.grant({
+        aclId: ACL_ID,
+        keyspaceRole: 'Read',
+        principal: { type: 'player', address: MEMBER },
+      }),
+    ).rejects.toMatchObject({ code: AclError.EntryNotFound })
+  })
+})
+
 // ── createAcl ─────────────────────────────────────────────────────────────────
 
 describe('createAcl', () => {
@@ -324,6 +341,107 @@ describe('createAcl', () => {
 
     expect(result.aclId).toBe(ACL_ID)
     expect(result.epoch).toBe(0)
+  })
+})
+
+// ── createAclForDao ───────────────────────────────────────────────────────────
+
+describe('createAclForDao', () => {
+  const ouPrincipal: Principal = { type: 'ou', daoId: DAO_ID }
+
+  it('creates an org-linked ACL and returns aclId and epoch', async () => {
+    const executor = (jest.fn() as any).mockResolvedValue({
+      digest: '0xd',
+      objectChanges: [
+        {
+          type: 'created',
+          objectId: ACL_ID,
+          objectType: `${PKG}::keyspace::Keyspace`,
+        },
+      ],
+    })
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 0 }))
+    const client = makeClient({ executor })
+
+    const result = await client.createAclForDao({
+      name: 'Org ACL',
+      daoId: DAO_ID,
+      grantPrincipals: [ouPrincipal],
+      readPrincipals: [ouPrincipal],
+      writePrincipals: [ouPrincipal],
+    })
+
+    expect(executor).toHaveBeenCalledTimes(1)
+    expect(result.aclId).toBe(ACL_ID)
+    expect(result.epoch).toBe(0)
+  })
+
+  it('defaults readPrincipals and writePrincipals to empty when omitted', async () => {
+    const executor = (jest.fn() as any).mockResolvedValue({
+      digest: '0xd',
+      objectChanges: [
+        {
+          type: 'created',
+          objectId: ACL_ID,
+          objectType: `${PKG}::keyspace::Keyspace`,
+        },
+      ],
+    })
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 0 }))
+    const client = makeClient({ executor })
+
+    const result = await client.createAclForDao({
+      name: 'Grant-only ACL',
+      daoId: DAO_ID,
+      grantPrincipals: [ouPrincipal],
+    })
+
+    expect(result.aclId).toBe(ACL_ID)
+  })
+
+  it('throws UnexpectedResponse when Keyspace is missing from objectChanges', async () => {
+    const executor = (jest.fn() as any).mockResolvedValue({
+      digest: '0xd',
+      objectChanges: [],
+    })
+    const client = makeClient({ executor })
+
+    await expect(
+      client.createAclForDao({
+        name: 'Org ACL',
+        daoId: DAO_ID,
+        grantPrincipals: [ouPrincipal],
+      }),
+    ).rejects.toMatchObject({ code: AclError.UnexpectedResponse })
+  })
+})
+
+// ── editDescription ───────────────────────────────────────────────────────────
+
+describe('editDescription', () => {
+  it('executes a transaction', async () => {
+    const executor = makeExecutor()
+    const client = makeClient({ executor })
+
+    await client.editDescription({
+      aclId: ACL_ID,
+      entryId: ENTRY_ID,
+      newDescription: 'updated description',
+    })
+
+    expect(executor).toHaveBeenCalledTimes(1)
+  })
+
+  it('throws DaoIdRequired when no daoId is configured or provided', async () => {
+    const client = makeClient({ daoId: undefined })
+
+    await expect(
+      client.editDescription({
+        aclId: ACL_ID,
+        entryId: ENTRY_ID,
+        newDescription: 'x',
+      }),
+    ).rejects.toMatchObject({ code: AclError.DaoIdRequired })
   })
 })
 
@@ -645,6 +763,43 @@ describe('rotateAllStaleEntries', () => {
     })
 
     expect(result).toEqual({ rotated: 0, skipped: 0 })
+  })
+
+  it('counts an entry as skipped when rotateEntry throws AlreadyCurrentEpoch', async () => {
+    const stale = makeEntry({ id: '0xstale', isStale: true })
+    mockFetchKeyspaceDetail.mockResolvedValue(
+      makeAclDetail({ entries: [stale] }),
+    )
+    // rotateEntry fetches meta then entry; returning non-stale triggers the throw
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 5 }))
+    mockFetchEncryptedEntry.mockResolvedValue(makeEntry({ isStale: false }))
+
+    const client = makeClient()
+    const result = await client.rotateAllStaleEntries({
+      aclId: ACL_ID,
+      walletAddress: OWNER,
+      signPersonalMessage: (jest.fn() as any).mockResolvedValue('sig'),
+    })
+
+    expect(result).toEqual({ rotated: 0, skipped: 1 })
+  })
+
+  it('re-throws errors that are not AlreadyCurrentEpoch', async () => {
+    const stale = makeEntry({ id: '0xstale', isStale: true })
+    mockFetchKeyspaceDetail.mockResolvedValue(
+      makeAclDetail({ entries: [stale] }),
+    )
+    // Returning null from fetchKeyspaceMeta causes getAclMeta to throw EntryNotFound
+    mockFetchKeyspaceMeta.mockResolvedValue(null)
+
+    const client = makeClient()
+    await expect(
+      client.rotateAllStaleEntries({
+        aclId: ACL_ID,
+        walletAddress: OWNER,
+        signPersonalMessage: (jest.fn() as any).mockResolvedValue('sig'),
+      }),
+    ).rejects.toMatchObject({ code: AclError.EntryNotFound })
   })
 
   it('calls onProgress with running totals', async () => {
