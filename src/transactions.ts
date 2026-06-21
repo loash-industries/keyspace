@@ -47,16 +47,18 @@ function textBytes(s: string): number[] {
   return Array.from(new TextEncoder().encode(s))
 }
 
-function encodePrincipals(principals: Principal[]) {
-  return bcs
-    .vector(PrincipalSchema)
-    .serialize(
-      principals.map((p) =>
-        p.type === 'player'
-          ? { Player: { addr: fromHex(p.address) } }
-          : { Ou: { dao_id: fromHex(p.daoId) } },
-      ),
-    )
+function buildPrincipalArg(tx: Transaction, packageId: string, p: Principal) {
+  if (p.type === 'player') {
+    return tx.moveCall({
+      target: `${packageId}::acl::player`,
+      arguments: [tx.pure.address(p.address)],
+    })
+  }
+  // ID has the same 32-byte BCS encoding as address
+  return tx.moveCall({
+    target: `${packageId}::acl::ou`,
+    arguments: [tx.pure.address(p.daoId)],
+  })
 }
 
 // ── Transactions ──────────────────────────────────────────────────────────────
@@ -87,14 +89,24 @@ export function createKeyspaceForDaoTx(
   writePrincipals: Principal[],
 ): Transaction {
   const tx = new Transaction()
+
+  // vector<Principal> cannot be passed as a BCS pure arg — Move 2 enum types are
+  // not accepted by Sui's PTB validator as pure inputs. Construct each principal
+  // on-chain and collect into a typed vector instead.
+  const buildVec = (principals: Principal[]) =>
+    tx.makeMoveVec({
+      type: `${packageId}::acl::Principal`,
+      elements: principals.map((p) => buildPrincipalArg(tx, packageId, p)),
+    })
+
   tx.moveCall({
     target: `${packageId}::keyspace::create_keyspace_for_dao`,
     arguments: [
       tx.pure.vector('u8', textBytes(name)),
       tx.object(daoId),
-      tx.pure(encodePrincipals(grantPrincipals)),
-      tx.pure(encodePrincipals(readPrincipals)),
-      tx.pure(encodePrincipals(writePrincipals)),
+      buildVec(grantPrincipals),
+      buildVec(readPrincipals),
+      buildVec(writePrincipals),
     ],
   })
   return tx
