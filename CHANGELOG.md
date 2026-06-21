@@ -1,3 +1,10 @@
+## 2.2.0 (2026-06-21)
+
+* fix: lint ([a619bc5](https://github.com/loash-industries/keyspace/commit/a619bc5))
+* fix: lint ([1551182](https://github.com/loash-industries/keyspace/commit/1551182))
+* test: add coverage for createAclForDao, editDescription, rotateAllStaleEntries, and parsePrincipal ([0fd1fb4](https://github.com/loash-industries/keyspace/commit/0fd1fb4))
+* feat: add createAclForDao for DAO-linked keyspace creation ([8f34498](https://github.com/loash-industries/keyspace/commit/8f34498))
+
 ## 2.1.0 (2026-06-18)
 
 * feat: added structure types to location data ([aa53326](https://github.com/loash-industries/keyspace/commit/aa53326))
