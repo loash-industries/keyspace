@@ -1,3 +1,7 @@
+## <small>2.2.1 (2026-06-21)</small>
+
+* fix:  bug with tx creation ([6f2737f](https://github.com/loash-industries/keyspace/commit/6f2737f))
+
 ## 2.2.0 (2026-06-21)
 
 * fix: lint ([a619bc5](https://github.com/loash-industries/keyspace/commit/a619bc5))
