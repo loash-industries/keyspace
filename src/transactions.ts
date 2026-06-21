@@ -47,6 +47,16 @@ function textBytes(s: string): number[] {
   return Array.from(new TextEncoder().encode(s))
 }
 
+function encodePrincipals(principals: Principal[]) {
+  return bcs.vector(PrincipalSchema).serialize(
+    principals.map((p) =>
+      p.type === 'player'
+        ? { Player: { addr: fromHex(p.address) } }
+        : { Ou: { dao_id: fromHex(p.daoId) } },
+    ),
+  )
+}
+
 // ── Transactions ──────────────────────────────────────────────────────────────
 
 /** `keyspace::create_keyspace(name)` — creator is seeded into Grant/Read/Write. */
@@ -55,6 +65,35 @@ export function createKeyspaceTx(packageId: string, name: string): Transaction {
   tx.moveCall({
     target: `${packageId}::keyspace::create_keyspace`,
     arguments: [tx.pure.vector('u8', textBytes(name))],
+  })
+  return tx
+}
+
+/**
+ * `keyspace::create_keyspace_for_dao(name, dao, grant, read, write)`
+ *
+ * The `daoId` is passed as an object reference (`tx.object`) so the Move VM
+ * enforces the `&DAO` witness; the caller's governance membership and the
+ * registrant DAO ID are verified on-chain.
+ */
+export function createKeyspaceForDaoTx(
+  packageId: string,
+  daoId: string,
+  name: string,
+  grantPrincipals: Principal[],
+  readPrincipals: Principal[],
+  writePrincipals: Principal[],
+): Transaction {
+  const tx = new Transaction()
+  tx.moveCall({
+    target: `${packageId}::keyspace::create_keyspace_for_dao`,
+    arguments: [
+      tx.pure.vector('u8', textBytes(name)),
+      tx.object(daoId),
+      tx.pure(encodePrincipals(grantPrincipals)),
+      tx.pure(encodePrincipals(readPrincipals)),
+      tx.pure(encodePrincipals(writePrincipals)),
+    ],
   })
   return tx
 }

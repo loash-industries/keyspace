@@ -14,6 +14,7 @@ import type {
 import { AclClientError, AclError } from './errors'
 import {
   createKeyspaceTx,
+  createKeyspaceForDaoTx,
   editDescriptionTx,
   editEntryTx,
   grantTx,
@@ -78,6 +79,52 @@ export class AclClient {
       throw new AclClientError(
         AclError.UnexpectedResponse,
         'createAcl: expected Keyspace in objectChanges. Ensure executor returns showObjectChanges: true.',
+      )
+    }
+
+    const meta = await this.getAclMeta(created.objectId)
+    return { aclId: created.objectId, epoch: meta.epoch }
+  }
+
+  /**
+   * Create a DAO-linked Keyspace.  The DAO's on-chain identity is recorded in
+   * the `KeyspaceCreated` event as `registrant_dao_id` so an indexer can map
+   * DAO → keyspaces without replaying Grant-role membership lists.
+   *
+   * The Move entry point takes a `&DAO` witness and calls
+   * `is_governance_member`, so both the DAO reference and the caller's
+   * membership are verified on-chain — `registrant_dao_id` cannot be spoofed.
+   *
+   * `grantPrincipals` must be non-empty (mirrors `EEmptyGrantPrincipals`).
+   * `readPrincipals` and `writePrincipals` default to empty and can be
+   * populated later via `grant`.
+   */
+  async createAclForDao(opts: {
+    name: string
+    daoId: string
+    grantPrincipals: Principal[]
+    readPrincipals?: Principal[]
+    writePrincipals?: Principal[]
+  }): Promise<CreateAclResult> {
+    const tx = createKeyspaceForDaoTx(
+      this.packageId,
+      opts.daoId,
+      opts.name,
+      opts.grantPrincipals,
+      opts.readPrincipals ?? [],
+      opts.writePrincipals ?? [],
+    )
+    const result = await this.executor(tx)
+    const changes = result.objectChanges ?? []
+
+    const created = changes.find(
+      (c) =>
+        c.type === 'created' && c.objectType.includes('::keyspace::Keyspace'),
+    )
+    if (!created) {
+      throw new AclClientError(
+        AclError.UnexpectedResponse,
+        'createAclForDao: expected Keyspace in objectChanges. Ensure executor returns showObjectChanges: true.',
       )
     }
 
