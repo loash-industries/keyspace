@@ -15,6 +15,9 @@ interface CachedSession {
 }
 
 const sessionCache = new Map<string, CachedSession>()
+// Inflight promises keyed by address — concurrent callers share one signing
+// request instead of each creating a distinct session key and racing to the wallet.
+const inflightSessions = new Map<string, Promise<SessionKey>>()
 
 function getCachedSession(address: string): CachedSession | null {
   const cached = sessionCache.get(address)
@@ -40,6 +43,7 @@ function setCachedSession(
 
 export function clearSessionCache(): void {
   sessionCache.clear()
+  inflightSessions.clear()
 }
 
 // ── Session key management ────────────────────────────────────────────────────
@@ -55,18 +59,32 @@ async function getOrCreateSessionKey(
   const cached = getCachedSession(address)
   if (cached) return cached.key as SessionKey
 
-  const sessionKey = await SessionKey.create({
-    address,
-    packageId,
-    ttlMin,
-    suiClient,
-  })
+  // If another caller is already creating a session key for this address,
+  // wait for that promise rather than triggering a second wallet signing prompt.
+  const inflight = inflightSessions.get(address)
+  if (inflight) return inflight
 
-  const signature = await signPersonalMessage(sessionKey.getPersonalMessage())
-  await sessionKey.setPersonalMessageSignature(signature)
+  const promise = (async () => {
+    const sessionKey = await SessionKey.create({
+      address,
+      packageId,
+      ttlMin,
+      suiClient,
+    })
 
-  setCachedSession(address, sessionKey, ttlMin)
-  return sessionKey
+    const signature = await signPersonalMessage(sessionKey.getPersonalMessage())
+    await sessionKey.setPersonalMessageSignature(signature)
+
+    setCachedSession(address, sessionKey, ttlMin)
+    return sessionKey
+  })()
+
+  inflightSessions.set(address, promise)
+  try {
+    return await promise
+  } finally {
+    inflightSessions.delete(address)
+  }
 }
 
 // ── Encrypt ───────────────────────────────────────────────────────────────────
