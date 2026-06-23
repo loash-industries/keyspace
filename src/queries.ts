@@ -89,6 +89,13 @@ function parsePrincipals(raw: unknown[]): Principal[] {
   })
 }
 
+// The JSON-RPC wraps the VecMap struct in { type, fields: { contents } }.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function unwrapAcl(acl: unknown): RawAclEntry[] {
+  const a = acl as any
+  return a?.contents ?? a?.fields?.contents ?? []
+}
+
 function parseRoleMap(aclContents: RawAclEntry[]): {
   grantPrincipals: Principal[]
   readPrincipals: Principal[]
@@ -117,7 +124,7 @@ function parseRoleMap(aclContents: RawAclEntry[]): {
       const k = key as Record<string, unknown>
       roleVariant =
         (k.variant as string | undefined) ??
-        ('Grant' in k ? 'Grant' : 'Read' in k ? 'Read' : 'Write' in k ? 'Write' : undefined)
+        (['Grant', 'Read', 'Write'] as const).find((v) => v in k)
     }
     if (roleVariant === 'Grant') grantPrincipals = principals
     else if (roleVariant === 'Read') readPrincipals = principals
@@ -164,9 +171,7 @@ export async function fetchKeyspaceDetail(
 
   const epoch = Number(fields.version ?? 0)
   const entryIds: string[] = fields.entries ?? []
-  // The JSON-RPC wraps the VecMap struct in { type, fields: { contents } }.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const aclContents: RawAclEntry[] = (fields.acl as any)?.contents ?? (fields.acl as any)?.fields?.contents ?? []
+  const aclContents = unwrapAcl(fields.acl)
 
   const { grantPrincipals, readPrincipals, writePrincipals } =
     parseRoleMap(aclContents)
