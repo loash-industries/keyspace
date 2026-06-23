@@ -18,7 +18,9 @@ import { AclClientError, AclError } from './errors'
 //   epoch:        string | number
 
 interface RawAclEntry {
-  key: string // 'Grant' | 'Read' | 'Write'
+  // The Sui TS SDK normalizes outer structs but leaves inner Move enum values
+  // as { variant: "Grant"|"Read"|"Write", fields: {} } rather than plain strings.
+  key: string | { variant?: string; [k: string]: unknown }
   value: unknown[]
 }
 
@@ -39,24 +41,40 @@ interface RawEncryptedEntryFields {
 
 // ── Principal parsing ─────────────────────────────────────────────────────────
 //
-// Sui serializes Move enum variants with fields as { VariantName: { ...fields } }
-// e.g. Principal::Player { addr } → { "Player": { "addr": "0x..." } }
-//      Principal::Ou { dao_id }   → { "Ou": { "dao_id": "0x..." } }
+// The Sui TS SDK may return Move enum variants in two formats:
+//   Normalized:  { "Player": { "addr": "0x..." } }  /  { "Ou": { "dao_id": "0x..." } }
+//   Raw RPC:     { "variant": "Player", "fields": { "addr": "0x..." } }
+//                { "variant": "Ou",    "fields": { "dao_id": "0x..." } }
+// We support both.
 
 function parsePrincipal(raw: unknown): Principal | null {
   if (!raw || typeof raw !== 'object') return null
   const obj = raw as Record<string, unknown>
 
+  // Normalized format
   if ('Player' in obj) {
     const player = obj['Player'] as Record<string, unknown>
     const addr = player?.addr as string | undefined
     if (!addr) return null
     return { type: 'player', address: addr }
   }
-
   if ('Ou' in obj) {
     const ou = obj['Ou'] as Record<string, unknown>
     const daoId = ou?.dao_id as string | undefined
+    if (!daoId) return null
+    return { type: 'ou', daoId }
+  }
+
+  // Raw RPC { variant, fields } format
+  const variant = typeof obj.variant === 'string' ? obj.variant : null
+  const fields = (obj.fields ?? {}) as Record<string, unknown>
+  if (variant === 'Player') {
+    const addr = fields.addr as string | undefined
+    if (!addr) return null
+    return { type: 'player', address: addr }
+  }
+  if (variant === 'Ou') {
+    const daoId = fields.dao_id as string | undefined
     if (!daoId) return null
     return { type: 'ou', daoId }
   }
@@ -80,13 +98,30 @@ function parseRoleMap(aclContents: RawAclEntry[]): {
   let readPrincipals: Principal[] = []
   let writePrincipals: Principal[] = []
 
-  for (const entry of aclContents) {
+  for (const rawEntry of aclContents) {
+    // The JSON-RPC response wraps VecMap entries in { type, fields: { key, value } }.
+    // Handle both the wrapped and the already-unwrapped forms.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const entry: RawAclEntry = (rawEntry as any)?.fields ?? rawEntry
+
     const principals = parsePrincipals(
       Array.isArray(entry.value) ? entry.value : [],
     )
-    if (entry.key === 'Grant') grantPrincipals = principals
-    else if (entry.key === 'Read') readPrincipals = principals
-    else if (entry.key === 'Write') writePrincipals = principals
+    // key is a plain string, { variant: "Grant"|"Read"|"Write", ... }, or
+    // the normalized { Grant: {} } form.
+    const key = entry.key
+    let roleVariant: string | undefined
+    if (typeof key === 'string') {
+      roleVariant = key
+    } else if (key && typeof key === 'object') {
+      const k = key as Record<string, unknown>
+      roleVariant =
+        (k.variant as string | undefined) ??
+        ('Grant' in k ? 'Grant' : 'Read' in k ? 'Read' : 'Write' in k ? 'Write' : undefined)
+    }
+    if (roleVariant === 'Grant') grantPrincipals = principals
+    else if (roleVariant === 'Read') readPrincipals = principals
+    else if (roleVariant === 'Write') writePrincipals = principals
   }
 
   return { grantPrincipals, readPrincipals, writePrincipals }
@@ -129,7 +164,9 @@ export async function fetchKeyspaceDetail(
 
   const epoch = Number(fields.version ?? 0)
   const entryIds: string[] = fields.entries ?? []
-  const aclContents: RawAclEntry[] = fields.acl?.contents ?? []
+  // The JSON-RPC wraps the VecMap struct in { type, fields: { contents } }.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const aclContents: RawAclEntry[] = (fields.acl as any)?.contents ?? (fields.acl as any)?.fields?.contents ?? []
 
   const { grantPrincipals, readPrincipals, writePrincipals } =
     parseRoleMap(aclContents)
