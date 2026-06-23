@@ -1,3 +1,9 @@
+## 2.3.0 (2026-06-23)
+
+* Merge pull request #4 from loash-industries/feat/shared-signed-message ([0beccea](https://github.com/loash-industries/keyspace/commit/0beccea)), closes [#4](https://github.com/loash-industries/keyspace/issues/4)
+* feat: added shared signed message to reduce race conditions ([b5bfcb2](https://github.com/loash-industries/keyspace/commit/b5bfcb2))
+* feat: shared signed message for deudupe ([7d759d2](https://github.com/loash-industries/keyspace/commit/7d759d2))
+
 ## <small>2.2.1 (2026-06-21)</small>
 
 * fix:  bug with tx creation ([6f2737f](https://github.com/loash-industries/keyspace/commit/6f2737f))
