@@ -35,7 +35,10 @@ export const LocationSchemaV2 = z.object({
   structure_type: z.string(),
   warp_in: z
     .string()
-    .max(WARP_IN_MAX_LENGTH, `warp_in must be ≤ ${WARP_IN_MAX_LENGTH} characters`),
+    .max(
+      WARP_IN_MAX_LENGTH,
+      `warp_in must be ≤ ${WARP_IN_MAX_LENGTH} characters`,
+    ),
   description: z.string(),
 })
 
@@ -142,7 +145,9 @@ export function migrateDocument(raw: unknown): LocationsDocument {
     }
 
     current = outputResult.data
-    step = migrationMap.get((current as Record<string, unknown>).schema_version as number)
+    step = migrationMap.get(
+      (current as Record<string, unknown>).schema_version as number,
+    )
   }
 
   // Validate the document against the current schema. Return current (not finalResult.data)

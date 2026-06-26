@@ -288,7 +288,9 @@ describe('addLocation — warp_in validation', () => {
     const client = makeClient(aclClient)
 
     await expect(
-      client.addLocation(makeLocation({ warp_in: 'a'.repeat(WARP_IN_MAX_LENGTH) })),
+      client.addLocation(
+        makeLocation({ warp_in: 'a'.repeat(WARP_IN_MAX_LENGTH) }),
+      ),
     ).resolves.toBeDefined()
   })
 
@@ -300,7 +302,9 @@ describe('addLocation — warp_in validation', () => {
     const client = makeClient(aclClient)
 
     await expect(
-      client.addLocation(makeLocation({ warp_in: 'a'.repeat(WARP_IN_MAX_LENGTH + 1) })),
+      client.addLocation(
+        makeLocation({ warp_in: 'a'.repeat(WARP_IN_MAX_LENGTH + 1) }),
+      ),
     ).rejects.toMatchObject({ code: AclError.ValidationFailed })
   })
 
@@ -312,7 +316,9 @@ describe('addLocation — warp_in validation', () => {
     const client = makeClient(aclClient)
 
     await expect(
-      client.addLocation(makeLocation({ warp_in: 'Jita IV - Moon 4 - Caldari Navy' })),
+      client.addLocation(
+        makeLocation({ warp_in: 'Jita IV - Moon 4 - Caldari Navy' }),
+      ),
     ).resolves.toBeDefined()
   })
 })
@@ -327,7 +333,9 @@ describe('updateLocation — warp_in validation', () => {
     const client = makeClient(aclClient)
 
     await expect(
-      client.updateLocation('x', { warp_in: 'a'.repeat(WARP_IN_MAX_LENGTH + 1) }),
+      client.updateLocation('x', {
+        warp_in: 'a'.repeat(WARP_IN_MAX_LENGTH + 1),
+      }),
     ).rejects.toMatchObject({ code: AclError.ValidationFailed })
   })
 })

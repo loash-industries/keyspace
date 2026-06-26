@@ -26,15 +26,15 @@ describe('migrateDocument', () => {
   })
 
   it('throws UnexpectedResponse when schema name is wrong', () => {
-    expect(() =>
-      migrateDocument({ ...baseV2, schema: 'wrong' }),
-    ).toThrow(expect.objectContaining({ code: AclError.UnexpectedResponse }))
+    expect(() => migrateDocument({ ...baseV2, schema: 'wrong' })).toThrow(
+      expect.objectContaining({ code: AclError.UnexpectedResponse }),
+    )
   })
 
   it('throws UnexpectedResponse for an unsupported version number', () => {
-    expect(() =>
-      migrateDocument({ ...baseV2, schema_version: 99 }),
-    ).toThrow(expect.objectContaining({ code: AclError.UnexpectedResponse }))
+    expect(() => migrateDocument({ ...baseV2, schema_version: 99 })).toThrow(
+      expect.objectContaining({ code: AclError.UnexpectedResponse }),
+    )
   })
 
   describe('v1 → v2 migration', () => {
@@ -114,20 +114,28 @@ describe('validateLocation', () => {
 
   it('does not throw for warp_in exactly at the 32-character limit', () => {
     expect(() =>
-      validateLocation({ ...validLocation, warp_in: 'a'.repeat(WARP_IN_MAX_LENGTH) }),
+      validateLocation({
+        ...validLocation,
+        warp_in: 'a'.repeat(WARP_IN_MAX_LENGTH),
+      }),
     ).not.toThrow()
   })
 
   it('throws ValidationFailed when warp_in exceeds 32 characters', () => {
     expect(() =>
-      validateLocation({ ...validLocation, warp_in: 'a'.repeat(WARP_IN_MAX_LENGTH + 1) }),
+      validateLocation({
+        ...validLocation,
+        warp_in: 'a'.repeat(WARP_IN_MAX_LENGTH + 1),
+      }),
     ).toThrow(expect.objectContaining({ code: AclError.ValidationFailed }))
   })
 
   it('accepts any string format for warp_in (not just PxLx)', () => {
     const formats = ['Jita IV - Moon 4', '0,0,0', 'custom-label', '']
     for (const warp_in of formats) {
-      expect(() => validateLocation({ ...validLocation, warp_in })).not.toThrow()
+      expect(() =>
+        validateLocation({ ...validLocation, warp_in }),
+      ).not.toThrow()
     }
   })
 })
