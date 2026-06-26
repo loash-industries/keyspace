@@ -1,3 +1,16 @@
+## 3.0.0 (2026-06-26)
+
+* chore: prettier ([adff8e4](https://github.com/loash-industries/keyspace/commit/adff8e4))
+* Merge pull request #5 from loash-industries/feat/versioned-state-updates ([335e012](https://github.com/loash-industries/keyspace/commit/335e012)), closes [#5](https://github.com/loash-industries/keyspace/issues/5)
+* feat: added docs on schema migrations ([3fa216e](https://github.com/loash-industries/keyspace/commit/3fa216e))
+* feat: added versioned state migrations and updates ([2b25c96](https://github.com/loash-industries/keyspace/commit/2b25c96))
+* feat!: empty commit for ver tag ([db8e0ff](https://github.com/loash-industries/keyspace/commit/db8e0ff))
+* fix: requested changes ([9349d6c](https://github.com/loash-industries/keyspace/commit/9349d6c))
+
+### BREAKING CHANGE
+
+* empty commit for ver tag
+
 ## 2.3.0 (2026-06-23)
 
 * Merge pull request #4 from loash-industries/feat/shared-signed-message ([0beccea](https://github.com/loash-industries/keyspace/commit/0beccea)), closes [#4](https://github.com/loash-industries/keyspace/issues/4)
