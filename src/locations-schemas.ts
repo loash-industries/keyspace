@@ -73,14 +73,17 @@ const MIGRATIONS: MigrationStep[] = [
     toVersion: 2,
     inputSchema: DocumentSchemaV1,
     outputSchema: DocumentSchemaV2,
-    migrate: (doc: z.infer<typeof DocumentSchemaV1>) => ({
-      ...doc,
-      schema_version: 2 as const,
-      locations: doc.locations.map((loc) => ({
-        ...loc,
-        warp_in: loc.warp_in.slice(0, WARP_IN_MAX_LENGTH),
-      })),
-    }),
+    migrate: (doc: unknown) => {
+      const v1 = doc as z.infer<typeof DocumentSchemaV1>
+      return {
+        ...v1,
+        schema_version: 2 as const,
+        locations: v1.locations.map((loc) => ({
+          ...loc,
+          warp_in: loc.warp_in.slice(0, WARP_IN_MAX_LENGTH),
+        })),
+      }
+    },
   },
   // ↑ To add v3: append { fromVersion: 2, toVersion: 3, inputSchema: DocumentSchemaV2, ... }
 ]
