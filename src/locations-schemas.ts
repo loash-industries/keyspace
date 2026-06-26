@@ -49,6 +49,9 @@ export const DocumentSchemaV2 = z.object({
 export type Location = z.infer<typeof LocationSchemaV2>
 export type LocationsDocument = z.infer<typeof DocumentSchemaV2>
 
+// Update this constant alongside LOCATIONS_SCHEMA_VERSION when bumping the schema version.
+const CURRENT_DOCUMENT_SCHEMA = DocumentSchemaV2
+
 // ── Migration steps ────────────────────────────────────────────────────────────
 //
 // One entry per version increment, applied in array order.
@@ -90,6 +93,9 @@ const MIGRATIONS: MigrationStep[] = [
 
 // ── Migration runner ───────────────────────────────────────────────────────────
 
+// Keyed by fromVersion for O(1) lookup; order-independent multi-hop traversal.
+const migrationMap = new Map(MIGRATIONS.map((m) => [m.fromVersion, m]))
+
 const SUPPORTED_VERSIONS: ReadonlySet<number> = new Set([
   LOCATIONS_SCHEMA_VERSION,
   ...MIGRATIONS.map((m) => m.fromVersion),
@@ -114,10 +120,9 @@ export function migrateDocument(raw: unknown): LocationsDocument {
   }
 
   let current: unknown = raw
+  let step = migrationMap.get(version)
 
-  for (const step of MIGRATIONS) {
-    if ((current as Record<string, unknown>).schema_version !== step.fromVersion) continue
-
+  while (step !== undefined) {
     const inputResult = step.inputSchema.safeParse(current)
     if (!inputResult.success) {
       throw new AclClientError(
@@ -137,10 +142,12 @@ export function migrateDocument(raw: unknown): LocationsDocument {
     }
 
     current = outputResult.data
+    step = migrationMap.get((current as Record<string, unknown>).schema_version as number)
   }
 
-  // Final parse confirms the fully-migrated document satisfies the current schema.
-  const finalResult = DocumentSchemaV2.safeParse(current)
+  // Validate the document against the current schema. Return current (not finalResult.data)
+  // to preserve any unknown fields written by a newer client for forward-compatibility.
+  const finalResult = CURRENT_DOCUMENT_SCHEMA.safeParse(current)
   if (!finalResult.success) {
     throw new AclClientError(
       AclError.UnexpectedResponse,
@@ -148,7 +155,7 @@ export function migrateDocument(raw: unknown): LocationsDocument {
     )
   }
 
-  return finalResult.data
+  return current as LocationsDocument
 }
 
 // ── Write-time validation ──────────────────────────────────────────────────────

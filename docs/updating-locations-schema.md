@@ -84,13 +84,15 @@ Add one entry to the `MIGRATIONS` array, immediately after the last existing ste
 
 The `migrate` function receives a document that has already passed `inputSchema.safeParse`. The return value is immediately run through `outputSchema.safeParse`. If either parse fails, a `ValidationFailed` error is thrown — you will catch this during tests before it reaches production.
 
-### 5. Update the final parse in `migrateDocument`
+### 5. Update `CURRENT_DOCUMENT_SCHEMA`
 
-At the bottom of `migrateDocument`, the runner does a final parse against the current schema. Update it to use `DocumentSchemaVN`:
+Near the top of the migration steps section in `locations-schemas.ts`, update the `CURRENT_DOCUMENT_SCHEMA` constant to reference the new schema:
 
 ```ts
-const finalResult = DocumentSchemaVN.safeParse(current)
+const CURRENT_DOCUMENT_SCHEMA = DocumentSchemaVN
 ```
+
+This constant is used both by the final validation in `migrateDocument` and must stay in sync with `LOCATIONS_SCHEMA_VERSION`.
 
 ### 6. Update `LOCATIONS_SCHEMA_VERSION` in `index.ts`
 

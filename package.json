@@ -36,7 +36,8 @@
   "peerDependencies": {
     "@aws-sdk/client-s3": "^3.0.0",
     "@mysten/seal": "^1.1.1",
-    "@mysten/sui": "^2.16.0"
+    "@mysten/sui": "^2.16.0",
+    "zod": "^4.0.0"
   },
   "peerDependenciesMeta": {
     "@aws-sdk/client-s3": {
@@ -69,7 +70,8 @@
     "ts-jest": "^29.1.2",
     "typescript": "^5.4.2",
     "vite": "^8.0.10",
-    "vite-plugin-dts": "^5.0.0"
+    "vite-plugin-dts": "^5.0.0",
+    "zod": "^4.4.3"
   },
   "jest": {
     "preset": "ts-jest/presets/default-esm",
@@ -106,8 +108,5 @@
       }
     },
     "coverageDirectory": "./coverage"
-  },
-  "dependencies": {
-    "zod": "^4.4.3"
   }
 }

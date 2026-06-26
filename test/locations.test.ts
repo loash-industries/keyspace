@@ -293,7 +293,10 @@ describe('addLocation — warp_in validation', () => {
   })
 
   it('rejects warp_in longer than 32 characters', async () => {
-    const aclClient = makeAclClient()
+    const doc = makeDoc()
+    const aclClient = makeAclClient({
+      readData: (jest.fn() as any).mockResolvedValue(encodeDoc(doc)),
+    })
     const client = makeClient(aclClient)
 
     await expect(
