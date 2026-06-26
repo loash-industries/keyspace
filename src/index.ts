@@ -11,6 +11,7 @@ export {
   LocationsClient,
   LOCATIONS_SCHEMA_NAME,
   LOCATIONS_SCHEMA_VERSION,
+  WARP_IN_MAX_LENGTH,
 } from './locations'
 export type {
   Principal,

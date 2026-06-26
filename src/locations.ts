@@ -1,25 +1,22 @@
 import type { AclClient } from './AclClient'
 import type { SignPersonalMessageFn, WriteResult, RotateResult } from './types'
 import { AclClientError, AclError } from './errors'
+import {
+  LOCATIONS_SCHEMA_NAME,
+  LOCATIONS_SCHEMA_VERSION,
+  WARP_IN_MAX_LENGTH,
+  type Location,
+  type LocationsDocument,
+  migrateDocument,
+  validateLocation,
+} from './locations-schemas'
 
-// ── Location schema ───────────────────────────────────────────────────────────
-
-export const LOCATIONS_SCHEMA_NAME = 'triex.locations' as const
-export const LOCATIONS_SCHEMA_VERSION = 1 as const
-
-export interface Location {
-  solar_system: string
-  structure_type: string
-  warp_in: string
-  description: string
-  id: string
-}
-
-export interface LocationsDocument {
-  schema: typeof LOCATIONS_SCHEMA_NAME
-  schema_version: typeof LOCATIONS_SCHEMA_VERSION
-  updated_at: string
-  locations: Location[]
+export {
+  LOCATIONS_SCHEMA_NAME,
+  LOCATIONS_SCHEMA_VERSION,
+  WARP_IN_MAX_LENGTH,
+  type Location,
+  type LocationsDocument,
 }
 
 // ── LocationsClient ───────────────────────────────────────────────────────────
@@ -51,7 +48,7 @@ export class LocationsClient {
     this.daoId = config.daoId
   }
 
-  /** Download and decrypt the existing locations document. */
+  /** Download, decrypt, and migrate the locations document to the current version. */
   async download(): Promise<LocationsDocument> {
     const raw = await this.acl.readData({
       aclId: this.aclId,
@@ -62,26 +59,12 @@ export class LocationsClient {
     })
 
     const text = new TextDecoder().decode(raw)
-    const doc = JSON.parse(text) as LocationsDocument
-
-    if (doc.schema !== LOCATIONS_SCHEMA_NAME) {
-      throw new AclClientError(
-        AclError.UnexpectedResponse,
-        `Unknown schema: expected "${LOCATIONS_SCHEMA_NAME}", got "${doc.schema}"`,
-      )
-    }
-    if (doc.schema_version !== LOCATIONS_SCHEMA_VERSION) {
-      throw new AclClientError(
-        AclError.UnexpectedResponse,
-        `Unsupported schema version: expected ${LOCATIONS_SCHEMA_VERSION}, got ${doc.schema_version}`,
-      )
-    }
-
-    return doc
+    return migrateDocument(JSON.parse(text))
   }
 
   /** Add a new location to the document, re-encrypt, and upload. */
   async addLocation(location: Location): Promise<WriteResult> {
+    validateLocation(location)
     const doc = await this.download()
 
     const exists = doc.locations.some((l) => l.id === location.id)
@@ -120,7 +103,9 @@ export class LocationsClient {
       )
     }
 
-    doc.locations[idx] = { ...doc.locations[idx], ...updates }
+    const merged = { ...doc.locations[idx], ...updates }
+    validateLocation(merged)
+    doc.locations[idx] = merged
     doc.updated_at = new Date().toISOString()
 
     return this.acl.editData({

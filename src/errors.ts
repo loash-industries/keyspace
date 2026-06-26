@@ -11,6 +11,7 @@ export enum AclError {
   StorageUploadFailed = 'ACL_STORAGE_UPLOAD_FAILED',
   StorageFetchFailed = 'ACL_STORAGE_FETCH_FAILED',
   UnexpectedResponse = 'ACL_UNEXPECTED_RESPONSE',
+  ValidationFailed = 'ACL_VALIDATION_FAILED',
 }
 
 export class AclClientError extends Error {
