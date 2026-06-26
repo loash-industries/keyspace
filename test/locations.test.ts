@@ -3,6 +3,7 @@ import {
   LocationsClient,
   LOCATIONS_SCHEMA_NAME,
   LOCATIONS_SCHEMA_VERSION,
+  WARP_IN_MAX_LENGTH,
   type LocationsDocument,
   type Location,
 } from '../src/locations'
@@ -112,7 +113,7 @@ describe('download', () => {
     })
   })
 
-  it('throws UnexpectedResponse when schema_version does not match', async () => {
+  it('throws UnexpectedResponse for an unknown schema version', async () => {
     const doc = makeDoc([], { schema_version: 99 as any })
     const aclClient = makeAclClient({
       readData: (jest.fn() as any).mockResolvedValue(encodeDoc(doc)),
@@ -273,6 +274,133 @@ describe('reencrypt', () => {
       expect.objectContaining({ aclId: ACL_ID, entryId: ENTRY_ID }),
     )
     expect(result).toEqual({ newUri: 'ipfs://new', epoch: 2 })
+  })
+})
+
+// ── warp_in validation ────────────────────────────────────────────────────────
+
+describe('addLocation — warp_in validation', () => {
+  it('accepts warp_in exactly at the 32-character limit', async () => {
+    const doc = makeDoc()
+    const aclClient = makeAclClient({
+      readData: (jest.fn() as any).mockResolvedValue(encodeDoc(doc)),
+    })
+    const client = makeClient(aclClient)
+
+    await expect(
+      client.addLocation(makeLocation({ warp_in: 'a'.repeat(WARP_IN_MAX_LENGTH) })),
+    ).resolves.toBeDefined()
+  })
+
+  it('rejects warp_in longer than 32 characters', async () => {
+    const aclClient = makeAclClient()
+    const client = makeClient(aclClient)
+
+    await expect(
+      client.addLocation(makeLocation({ warp_in: 'a'.repeat(WARP_IN_MAX_LENGTH + 1) })),
+    ).rejects.toMatchObject({ code: AclError.ValidationFailed })
+  })
+
+  it('allows any string format (not just PxLx)', async () => {
+    const doc = makeDoc()
+    const aclClient = makeAclClient({
+      readData: (jest.fn() as any).mockResolvedValue(encodeDoc(doc)),
+    })
+    const client = makeClient(aclClient)
+
+    await expect(
+      client.addLocation(makeLocation({ warp_in: 'Jita IV - Moon 4 - Caldari Navy' })),
+    ).resolves.toBeDefined()
+  })
+})
+
+describe('updateLocation — warp_in validation', () => {
+  it('rejects an update that would exceed 32 characters', async () => {
+    const loc = makeLocation({ id: 'x', warp_in: 'short' })
+    const doc = makeDoc([loc])
+    const aclClient = makeAclClient({
+      readData: (jest.fn() as any).mockResolvedValue(encodeDoc(doc)),
+    })
+    const client = makeClient(aclClient)
+
+    await expect(
+      client.updateLocation('x', { warp_in: 'a'.repeat(WARP_IN_MAX_LENGTH + 1) }),
+    ).rejects.toMatchObject({ code: AclError.ValidationFailed })
+  })
+})
+
+// ── Schema migration ──────────────────────────────────────────────────────────
+
+describe('download — schema migration', () => {
+  it('auto-migrates a v1 document and preserves short warp_in values', async () => {
+    const v1Doc = {
+      schema: LOCATIONS_SCHEMA_NAME,
+      schema_version: 1,
+      updated_at: new Date().toISOString(),
+      locations: [makeLocation({ warp_in: 'P1L0' })],
+    }
+    const aclClient = makeAclClient({
+      readData: (jest.fn() as any).mockResolvedValue(
+        new TextEncoder().encode(JSON.stringify(v1Doc)),
+      ),
+    })
+    const client = makeClient(aclClient)
+
+    const result = await client.download()
+
+    expect(result.schema_version).toBe(LOCATIONS_SCHEMA_VERSION)
+    expect(result.locations[0].warp_in).toBe('P1L0')
+  })
+
+  it('truncates oversized warp_in values when migrating from v1', async () => {
+    const longWarpIn = 'a'.repeat(WARP_IN_MAX_LENGTH + 10)
+    const v1Doc = {
+      schema: LOCATIONS_SCHEMA_NAME,
+      schema_version: 1,
+      updated_at: new Date().toISOString(),
+      locations: [makeLocation({ warp_in: longWarpIn })],
+    }
+    const aclClient = makeAclClient({
+      readData: (jest.fn() as any).mockResolvedValue(
+        new TextEncoder().encode(JSON.stringify(v1Doc)),
+      ),
+    })
+    const client = makeClient(aclClient)
+
+    const result = await client.download()
+
+    expect(result.locations[0].warp_in).toHaveLength(WARP_IN_MAX_LENGTH)
+  })
+
+  it('throws UnexpectedResponse for an unknown schema version', async () => {
+    const doc = makeDoc([], { schema_version: 99 as any })
+    const aclClient = makeAclClient({
+      readData: (jest.fn() as any).mockResolvedValue(encodeDoc(doc)),
+    })
+    const client = makeClient(aclClient)
+
+    await expect(client.download()).rejects.toMatchObject({
+      code: AclError.UnexpectedResponse,
+    })
+  })
+
+  it('throws ValidationFailed when a v1 document has corrupted fields', async () => {
+    const corruptV1Doc = {
+      schema: LOCATIONS_SCHEMA_NAME,
+      schema_version: 1,
+      updated_at: new Date().toISOString(),
+      locations: [{ id: 123, warp_in: 'P1L0' }], // id must be a string
+    }
+    const aclClient = makeAclClient({
+      readData: (jest.fn() as any).mockResolvedValue(
+        new TextEncoder().encode(JSON.stringify(corruptV1Doc)),
+      ),
+    })
+    const client = makeClient(aclClient)
+
+    await expect(client.download()).rejects.toMatchObject({
+      code: AclError.ValidationFailed,
+    })
   })
 })
 
