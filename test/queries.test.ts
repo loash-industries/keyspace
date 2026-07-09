@@ -19,21 +19,25 @@ const MEMBER2 =
 const DAO_ID =
   '0x0000000000000000000000000000000000000000000000000000000000002001'
 
+// The queries use the unified core API (`client.core.getObject` /
+// `client.core.getObjects`). Override keys stay `getObject`/`multiGetObjects`
+// for readability but are wired onto `core`.
 function makeSuiClient(overrides: Record<string, jest.Mock> = {}) {
   return {
-    getObject: jest.fn() as jest.Mock,
-    multiGetObjects: jest.fn() as jest.Mock,
-    ...overrides,
+    core: {
+      getObject: overrides.getObject ?? (jest.fn() as jest.Mock),
+      getObjects:
+        overrides.getObjects ??
+        overrides.multiGetObjects ??
+        (jest.fn() as jest.Mock),
+    },
   }
 }
 
+// core.getObject returns `{ object: { objectId, json } }`, where `json` is the
+// object's Move struct rendered as JSON (null for non-Move objects).
 function moveObjectResponse(id: string, fields: Record<string, unknown>) {
-  return {
-    data: {
-      objectId: id,
-      content: { dataType: 'moveObject', fields },
-    },
-  }
+  return { object: { objectId: id, json: fields } }
 }
 
 function makeKeyspaceFields(overrides: Record<string, unknown> = {}) {
@@ -52,7 +56,7 @@ describe('fetchKeyspaceMeta', () => {
   it('returns null when content is not moveObject', async () => {
     const client = makeSuiClient({
       getObject: (jest.fn() as any).mockResolvedValue({
-        data: { content: { dataType: 'package' } },
+        object: { json: null },
       }),
     })
     const result = await fetchKeyspaceMeta(client, ACL_ID)
@@ -102,9 +106,9 @@ describe('fetchKeyspaceDetail', () => {
   it('returns null when content is not moveObject', async () => {
     const client = makeSuiClient({
       getObject: (jest.fn() as any).mockResolvedValue({
-        data: { content: { dataType: 'package' } },
+        object: { json: null },
       }),
-      multiGetObjects: (jest.fn() as any).mockResolvedValue([]),
+      multiGetObjects: (jest.fn() as any).mockResolvedValue({ objects: [] }),
     })
     const result = await fetchKeyspaceDetail(client, ACL_ID)
     expect(result).toBeNull()
@@ -122,7 +126,7 @@ describe('fetchKeyspaceDetail', () => {
           }),
         ),
       ),
-      multiGetObjects: (jest.fn() as any).mockResolvedValue([]),
+      multiGetObjects: (jest.fn() as any).mockResolvedValue({ objects: [] }),
     })
     const result = await fetchKeyspaceDetail(client, ACL_ID)
     expect(result).not.toBeNull()
@@ -156,7 +160,7 @@ describe('fetchKeyspaceDetail', () => {
           }),
         ),
       ),
-      multiGetObjects: (jest.fn() as any).mockResolvedValue([]),
+      multiGetObjects: (jest.fn() as any).mockResolvedValue({ objects: [] }),
     })
     const result = await fetchKeyspaceDetail(client, ACL_ID)
     expect(result!.readPrincipals).toEqual([
@@ -188,7 +192,7 @@ describe('fetchKeyspaceDetail', () => {
           }),
         ),
       ),
-      multiGetObjects: (jest.fn() as any).mockResolvedValue([]),
+      multiGetObjects: (jest.fn() as any).mockResolvedValue({ objects: [] }),
     })
     const result = await fetchKeyspaceDetail(client, ACL_ID)
     // Only the valid Player entry survives; unknown shapes are silently dropped
@@ -211,7 +215,7 @@ describe('fetchKeyspaceDetail', () => {
           }),
         ),
       ),
-      multiGetObjects: (jest.fn() as any).mockResolvedValue([]),
+      multiGetObjects: (jest.fn() as any).mockResolvedValue({ objects: [] }),
     })
     const result = await fetchKeyspaceDetail(client, ACL_ID)
     expect(result!.writePrincipals).toEqual([
@@ -234,7 +238,7 @@ describe('fetchKeyspaceDetail', () => {
           }),
         ),
       ),
-      multiGetObjects: (jest.fn() as any).mockResolvedValue([]),
+      multiGetObjects: (jest.fn() as any).mockResolvedValue({ objects: [] }),
     })
     const result = await fetchKeyspaceDetail(client, ACL_ID)
     expect(result!.grantPrincipals).toEqual([{ type: 'ou', daoId: DAO_ID }])
@@ -251,23 +255,20 @@ describe('fetchKeyspaceDetail', () => {
           }),
         ),
       ),
-      multiGetObjects: (jest.fn() as any).mockResolvedValue([
-        {
-          data: {
+      multiGetObjects: (jest.fn() as any).mockResolvedValue({
+        objects: [
+          {
             objectId: ENTRY_ID,
-            content: {
-              dataType: 'moveObject',
-              fields: {
-                keyspace_id: ACL_ID,
-                uri: 'ipfs://QmABC',
-                description: 'test entry',
-                created_by: OWNER,
-                epoch: 5,
-              },
+            json: {
+              keyspace_id: ACL_ID,
+              uri: 'ipfs://QmABC',
+              description: 'test entry',
+              created_by: OWNER,
+              epoch: 5,
             },
           },
-        },
-      ]),
+        ],
+      }),
     })
     const result = await fetchKeyspaceDetail(client, ACL_ID)
     expect(result!.entries).toHaveLength(1)
@@ -288,7 +289,7 @@ describe('fetchEncryptedEntry', () => {
   it('returns null when content is not moveObject', async () => {
     const client = makeSuiClient({
       getObject: (jest.fn() as any).mockResolvedValue({
-        data: { content: { dataType: 'package' } },
+        object: { json: null },
       }),
     })
     const result = await fetchEncryptedEntry(client, ENTRY_ID, 1)
