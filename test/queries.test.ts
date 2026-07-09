@@ -55,7 +55,9 @@ function makeKeyspaceFields(overrides: Record<string, unknown> = {}) {
 describe('fetchKeyspaceMeta', () => {
   it('returns null when content is not moveObject', async () => {
     const client = makeSuiClient({
-      getObject: (jest.fn() as any).mockResolvedValue({ object: { json: null } }),
+      getObject: (jest.fn() as any).mockResolvedValue({
+        object: { json: null },
+      }),
     })
     const result = await fetchKeyspaceMeta(client, ACL_ID)
     expect(result).toBeNull()
@@ -103,7 +105,9 @@ describe('fetchKeyspaceMeta', () => {
 describe('fetchKeyspaceDetail', () => {
   it('returns null when content is not moveObject', async () => {
     const client = makeSuiClient({
-      getObject: (jest.fn() as any).mockResolvedValue({ object: { json: null } }),
+      getObject: (jest.fn() as any).mockResolvedValue({
+        object: { json: null },
+      }),
       multiGetObjects: (jest.fn() as any).mockResolvedValue({ objects: [] }),
     })
     const result = await fetchKeyspaceDetail(client, ACL_ID)
@@ -284,7 +288,9 @@ describe('fetchKeyspaceDetail', () => {
 describe('fetchEncryptedEntry', () => {
   it('returns null when content is not moveObject', async () => {
     const client = makeSuiClient({
-      getObject: (jest.fn() as any).mockResolvedValue({ object: { json: null } }),
+      getObject: (jest.fn() as any).mockResolvedValue({
+        object: { json: null },
+      }),
     })
     const result = await fetchEncryptedEntry(client, ENTRY_ID, 1)
     expect(result).toBeNull()
