@@ -147,15 +147,10 @@ export async function fetchKeyspaceMeta(
   keyspaceId: string,
 ): Promise<AclMeta | null> {
   // core.getObject throws if the object doesn't exist — treat as "not found".
-  let res
-  try {
-    res = await suiClient.core.getObject({
-      objectId: keyspaceId,
-      include: { json: true },
-    })
-  } catch {
-    return null
-  }
+  const res = await suiClient.core
+    .getObject({ objectId: keyspaceId, include: { json: true } })
+    .catch(() => null)
+  if (res === null) return null
   const fields = res.object?.json as RawKeyspaceFields | null
   if (!fields) return null
   return {
@@ -172,15 +167,10 @@ export async function fetchKeyspaceDetail(
   keyspaceId: string,
 ): Promise<AclDetail | null> {
   // core.getObject throws if the object doesn't exist — treat as "not found".
-  let res
-  try {
-    res = await suiClient.core.getObject({
-      objectId: keyspaceId,
-      include: { json: true },
-    })
-  } catch {
-    return null
-  }
+  const res = await suiClient.core
+    .getObject({ objectId: keyspaceId, include: { json: true } })
+    .catch(() => null)
+  if (res === null) return null
   const fields = res.object?.json as RawKeyspaceFields | null
   if (!fields) return null
 
@@ -213,15 +203,10 @@ export async function fetchEncryptedEntry(
   keyspaceEpoch: number,
 ): Promise<EntryMeta | null> {
   // core.getObject throws if the object doesn't exist — treat as "not found".
-  let res
-  try {
-    res = await suiClient.core.getObject({
-      objectId: entryId,
-      include: { json: true },
-    })
-  } catch {
-    return null
-  }
+  const res = await suiClient.core
+    .getObject({ objectId: entryId, include: { json: true } })
+    .catch(() => null)
+  if (res === null) return null
   const fields = res.object?.json as RawEncryptedEntryFields | null
   if (!fields) return null
   const entryEpoch = Number(fields.epoch ?? 0)
