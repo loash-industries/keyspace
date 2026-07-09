@@ -3,7 +3,12 @@ import { AclClientError, AclError } from './errors'
 
 // ── Raw field shapes returned by Sui RPC ──────────────────────────────────────
 //
-// armature_vault::keyspace::Keyspace fields (showContent: true):
+// Fetched via the unified core API (`core.getObject`/`core.getObjects` with
+// `include: { json: true }`), which returns the object's Move struct as a JSON
+// object. Nested-struct field names may differ from the legacy JSON-RPC shape,
+// so the parsers below defensively accept both (see `unwrapAcl`/`parsePrincipal`).
+//
+// armature_vault::keyspace::Keyspace fields:
 //   id:      { id: string }
 //   acl:     { contents: Array<{ key: string, value: unknown[] }> }
 //   name:    string
@@ -141,13 +146,18 @@ export async function fetchKeyspaceMeta(
   suiClient: any,
   keyspaceId: string,
 ): Promise<AclMeta | null> {
-  const res = await suiClient.getObject({
-    id: keyspaceId,
-    options: { showContent: true },
-  })
-  const content = res.data?.content
-  if (content?.dataType !== 'moveObject') return null
-  const fields = content.fields as RawKeyspaceFields
+  // core.getObject throws if the object doesn't exist — treat as "not found".
+  let res
+  try {
+    res = await suiClient.core.getObject({
+      objectId: keyspaceId,
+      include: { json: true },
+    })
+  } catch {
+    return null
+  }
+  const fields = res.object?.json as RawKeyspaceFields | null
+  if (!fields) return null
   return {
     id: keyspaceId,
     name: fields.name,
@@ -161,13 +171,18 @@ export async function fetchKeyspaceDetail(
   suiClient: any,
   keyspaceId: string,
 ): Promise<AclDetail | null> {
-  const res = await suiClient.getObject({
-    id: keyspaceId,
-    options: { showContent: true },
-  })
-  const content = res.data?.content
-  if (content?.dataType !== 'moveObject') return null
-  const fields = content.fields as RawKeyspaceFields
+  // core.getObject throws if the object doesn't exist — treat as "not found".
+  let res
+  try {
+    res = await suiClient.core.getObject({
+      objectId: keyspaceId,
+      include: { json: true },
+    })
+  } catch {
+    return null
+  }
+  const fields = res.object?.json as RawKeyspaceFields | null
+  if (!fields) return null
 
   const epoch = Number(fields.version ?? 0)
   const entryIds: string[] = fields.entries ?? []
@@ -197,13 +212,18 @@ export async function fetchEncryptedEntry(
   entryId: string,
   keyspaceEpoch: number,
 ): Promise<EntryMeta | null> {
-  const res = await suiClient.getObject({
-    id: entryId,
-    options: { showContent: true },
-  })
-  const content = res.data?.content
-  if (content?.dataType !== 'moveObject') return null
-  const fields = content.fields as RawEncryptedEntryFields
+  // core.getObject throws if the object doesn't exist — treat as "not found".
+  let res
+  try {
+    res = await suiClient.core.getObject({
+      objectId: entryId,
+      include: { json: true },
+    })
+  } catch {
+    return null
+  }
+  const fields = res.object?.json as RawEncryptedEntryFields | null
+  if (!fields) return null
   const entryEpoch = Number(fields.epoch ?? 0)
   return {
     id: entryId,
@@ -223,20 +243,21 @@ async function fetchEncryptedEntries(
   keyspaceEpoch: number,
 ): Promise<EntryMeta[]> {
   if (entryIds.length === 0) return []
-  const res = await suiClient.multiGetObjects({
-    ids: entryIds,
-    options: { showContent: true },
+  const res = await suiClient.core.getObjects({
+    objectIds: entryIds,
+    include: { json: true },
   })
 
+  // core.getObjects returns `{ objects: (Object | Error)[] }`; Error entries
+  // (e.g. deleted/out-of-retention) and objects without Move JSON are skipped.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (res ?? []).flatMap((obj: any) => {
-    const content = obj.data?.content
-    if (content?.dataType !== 'moveObject') return []
-    const fields = content.fields as RawEncryptedEntryFields
+  return ((res?.objects ?? []) as any[]).flatMap((obj: any) => {
+    const fields = obj?.json as RawEncryptedEntryFields | null
+    if (!fields) return []
     const entryEpoch = Number(fields.epoch ?? 0)
     return [
       {
-        id: obj.data.objectId as string,
+        id: obj.objectId as string,
         keyspaceId: fields.keyspace_id,
         uri: fields.uri,
         description: fields.description,
