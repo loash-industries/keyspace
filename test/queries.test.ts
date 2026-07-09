@@ -98,6 +98,14 @@ describe('fetchKeyspaceMeta', () => {
     const result = await fetchKeyspaceMeta(client, ACL_ID)
     expect(result?.epoch).toBe(0)
   })
+
+  it('returns null when getObject rejects (object not found)', async () => {
+    const client = makeSuiClient({
+      getObject: (jest.fn() as any).mockRejectedValue(new Error('not found')),
+    })
+    const result = await fetchKeyspaceMeta(client, ACL_ID)
+    expect(result).toBeNull()
+  })
 })
 
 // ── fetchKeyspaceDetail ───────────────────────────────────────────────────────
@@ -244,6 +252,170 @@ describe('fetchKeyspaceDetail', () => {
     expect(result!.grantPrincipals).toEqual([{ type: 'ou', daoId: DAO_ID }])
   })
 
+  it('parses gRPC @variant Player and Ou principals', async () => {
+    const client = makeSuiClient({
+      getObject: (jest.fn() as any).mockResolvedValue(
+        moveObjectResponse(
+          ACL_ID,
+          makeKeyspaceFields({
+            acl: {
+              contents: [
+                {
+                  key: 'Read',
+                  value: [{ '@variant': 'Player', addr: MEMBER1 }],
+                },
+                {
+                  key: 'Grant',
+                  value: [{ '@variant': 'Ou', dao_id: DAO_ID }],
+                },
+              ],
+            },
+          }),
+        ),
+      ),
+      multiGetObjects: (jest.fn() as any).mockResolvedValue({ objects: [] }),
+    })
+    const result = await fetchKeyspaceDetail(client, ACL_ID)
+    expect(result!.readPrincipals).toEqual([
+      { type: 'player', address: MEMBER1 },
+    ])
+    expect(result!.grantPrincipals).toEqual([{ type: 'ou', daoId: DAO_ID }])
+  })
+
+  it('parses raw JSON-RPC { variant, fields } Player and Ou principals', async () => {
+    const client = makeSuiClient({
+      getObject: (jest.fn() as any).mockResolvedValue(
+        moveObjectResponse(
+          ACL_ID,
+          makeKeyspaceFields({
+            acl: {
+              contents: [
+                {
+                  key: 'Read',
+                  value: [{ variant: 'Player', fields: { addr: MEMBER1 } }],
+                },
+                {
+                  key: 'Grant',
+                  value: [{ variant: 'Ou', fields: { dao_id: DAO_ID } }],
+                },
+              ],
+            },
+          }),
+        ),
+      ),
+      multiGetObjects: (jest.fn() as any).mockResolvedValue({ objects: [] }),
+    })
+    const result = await fetchKeyspaceDetail(client, ACL_ID)
+    expect(result!.readPrincipals).toEqual([
+      { type: 'player', address: MEMBER1 },
+    ])
+    expect(result!.grantPrincipals).toEqual([{ type: 'ou', daoId: DAO_ID }])
+  })
+
+  it('drops @variant / variant principals that are missing their address fields', async () => {
+    const client = makeSuiClient({
+      getObject: (jest.fn() as any).mockResolvedValue(
+        moveObjectResponse(
+          ACL_ID,
+          makeKeyspaceFields({
+            acl: {
+              contents: [
+                {
+                  key: 'Read',
+                  value: [
+                    { '@variant': 'Player' }, // no addr
+                    { '@variant': 'Ou' }, // no dao_id
+                    { variant: 'Player', fields: {} }, // no addr
+                    { variant: 'Ou', fields: {} }, // no dao_id
+                    { variant: 'Bogus', fields: {} }, // unknown variant
+                  ],
+                },
+              ],
+            },
+          }),
+        ),
+      ),
+      multiGetObjects: (jest.fn() as any).mockResolvedValue({ objects: [] }),
+    })
+    const result = await fetchKeyspaceDetail(client, ACL_ID)
+    expect(result!.readPrincipals).toEqual([])
+  })
+
+  it('parses role keys given as gRPC, raw, normalized, and wrapped objects', async () => {
+    const client = makeSuiClient({
+      getObject: (jest.fn() as any).mockResolvedValue(
+        moveObjectResponse(
+          ACL_ID,
+          makeKeyspaceFields({
+            acl: {
+              contents: [
+                // gRPC { "@variant": "Read" } key
+                {
+                  key: { '@variant': 'Read' },
+                  value: [{ Player: { addr: MEMBER1 } }],
+                },
+                // raw JSON-RPC { variant: "Write" } key
+                {
+                  key: { variant: 'Write' },
+                  value: [{ Player: { addr: MEMBER2 } }],
+                },
+                // normalized { Grant: {} } key, wrapped in { fields: { key, value } }
+                {
+                  fields: {
+                    key: { Grant: {} },
+                    value: [{ Ou: { dao_id: DAO_ID } }],
+                  },
+                },
+              ],
+            },
+          }),
+        ),
+      ),
+      multiGetObjects: (jest.fn() as any).mockResolvedValue({ objects: [] }),
+    })
+    const result = await fetchKeyspaceDetail(client, ACL_ID)
+    expect(result!.readPrincipals).toEqual([
+      { type: 'player', address: MEMBER1 },
+    ])
+    expect(result!.writePrincipals).toEqual([
+      { type: 'player', address: MEMBER2 },
+    ])
+    expect(result!.grantPrincipals).toEqual([{ type: 'ou', daoId: DAO_ID }])
+  })
+
+  it('unwraps acl from the JSON-RPC { fields: { contents } } shape', async () => {
+    const client = makeSuiClient({
+      getObject: (jest.fn() as any).mockResolvedValue(
+        moveObjectResponse(
+          ACL_ID,
+          makeKeyspaceFields({
+            acl: {
+              fields: {
+                contents: [
+                  { key: 'Read', value: [{ Player: { addr: MEMBER1 } }] },
+                ],
+              },
+            },
+          }),
+        ),
+      ),
+      multiGetObjects: (jest.fn() as any).mockResolvedValue({ objects: [] }),
+    })
+    const result = await fetchKeyspaceDetail(client, ACL_ID)
+    expect(result!.readPrincipals).toEqual([
+      { type: 'player', address: MEMBER1 },
+    ])
+  })
+
+  it('returns null when getObject rejects (object not found)', async () => {
+    const client = makeSuiClient({
+      getObject: (jest.fn() as any).mockRejectedValue(new Error('not found')),
+      multiGetObjects: (jest.fn() as any).mockResolvedValue({ objects: [] }),
+    })
+    const result = await fetchKeyspaceDetail(client, ACL_ID)
+    expect(result).toBeNull()
+  })
+
   it('includes fetched entries in the detail', async () => {
     const client = makeSuiClient({
       getObject: (jest.fn() as any).mockResolvedValue(
@@ -291,6 +463,14 @@ describe('fetchEncryptedEntry', () => {
       getObject: (jest.fn() as any).mockResolvedValue({
         object: { json: null },
       }),
+    })
+    const result = await fetchEncryptedEntry(client, ENTRY_ID, 1)
+    expect(result).toBeNull()
+  })
+
+  it('returns null when getObject rejects (object not found)', async () => {
+    const client = makeSuiClient({
+      getObject: (jest.fn() as any).mockRejectedValue(new Error('not found')),
     })
     const result = await fetchEncryptedEntry(client, ENTRY_ID, 1)
     expect(result).toBeNull()
