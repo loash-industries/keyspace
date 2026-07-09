@@ -1,3 +1,15 @@
+## 4.0.0 (2026-07-09)
+
+* Merge pull request #6 from loash-industries/feat/upgrade-to-grpc-support ([99e4b5d](https://github.com/loash-industries/keyspace/commit/99e4b5d)), closes [#6](https://github.com/loash-industries/keyspace/issues/6)
+* fix: code conventions ([e8cc719](https://github.com/loash-industries/keyspace/commit/e8cc719))
+* fix: prettier ([871c7fc](https://github.com/loash-industries/keyspace/commit/871c7fc))
+* feat: use grpc instead of jsonrpc ([df4f325](https://github.com/loash-industries/keyspace/commit/df4f325))
+* feat!: upgrade ([188da17](https://github.com/loash-industries/keyspace/commit/188da17))
+
+### BREAKING CHANGE
+
+* upgrade
+
 ## 3.0.0 (2026-06-26)
 
 * chore: prettier ([adff8e4](https://github.com/loash-industries/keyspace/commit/adff8e4))
