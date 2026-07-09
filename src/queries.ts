@@ -46,11 +46,13 @@ interface RawEncryptedEntryFields {
 
 // ── Principal parsing ─────────────────────────────────────────────────────────
 //
-// The Sui TS SDK may return Move enum variants in two formats:
+// Sui clients return Move enum variants in three formats:
 //   Normalized:  { "Player": { "addr": "0x..." } }  /  { "Ou": { "dao_id": "0x..." } }
-//   Raw RPC:     { "variant": "Player", "fields": { "addr": "0x..." } }
+//   Raw JSON-RPC:{ "variant": "Player", "fields": { "addr": "0x..." } }
 //                { "variant": "Ou",    "fields": { "dao_id": "0x..." } }
-// We support both.
+//   gRPC core:   { "@variant": "Player", "addr": "0x..." }   (fields inlined)
+//                { "@variant": "Ou",    "dao_id": "0x..." }
+// We support all three.
 
 function parsePrincipal(raw: unknown): Principal | null {
   if (!raw || typeof raw !== 'object') return null
@@ -70,7 +72,21 @@ function parsePrincipal(raw: unknown): Principal | null {
     return { type: 'ou', daoId }
   }
 
-  // Raw RPC { variant, fields } format
+  // gRPC core-json format: { "@variant": "Player"|"Ou", ...inlined fields }
+  const atVariant =
+    typeof obj['@variant'] === 'string' ? (obj['@variant'] as string) : null
+  if (atVariant === 'Player') {
+    const addr = obj.addr as string | undefined
+    if (!addr) return null
+    return { type: 'player', address: addr }
+  }
+  if (atVariant === 'Ou') {
+    const daoId = obj.dao_id as string | undefined
+    if (!daoId) return null
+    return { type: 'ou', daoId }
+  }
+
+  // Raw JSON-RPC { variant, fields } format
   const variant = typeof obj.variant === 'string' ? obj.variant : null
   const fields = (obj.fields ?? {}) as Record<string, unknown>
   if (variant === 'Player') {
@@ -119,8 +135,8 @@ function parseRoleMap(aclContents: RawAclEntry[]): {
     const principals = parsePrincipals(
       Array.isArray(entry.value) ? entry.value : [],
     )
-    // key is a plain string, { variant: "Grant"|"Read"|"Write", ... }, or
-    // the normalized { Grant: {} } form.
+    // key is a plain string, the gRPC { "@variant": "Grant" } form, the raw
+    // JSON-RPC { variant: "Grant", ... } form, or the normalized { Grant: {} }.
     const key = entry.key
     let roleVariant: string | undefined
     if (typeof key === 'string') {
@@ -128,6 +144,9 @@ function parseRoleMap(aclContents: RawAclEntry[]): {
     } else if (key && typeof key === 'object') {
       const k = key as Record<string, unknown>
       roleVariant =
+        (typeof k['@variant'] === 'string'
+          ? (k['@variant'] as string)
+          : undefined) ??
         (k.variant as string | undefined) ??
         (['Grant', 'Read', 'Write'] as const).find((v) => v in k)
     }
