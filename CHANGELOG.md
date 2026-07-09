@@ -1,3 +1,9 @@
+## <small>4.0.1 (2026-07-09)</small>
+
+* fix: resolution of principals ([6ee83fa](https://github.com/loash-industries/keyspace/commit/6ee83fa))
+* fix: test coverage ([9551c71](https://github.com/loash-industries/keyspace/commit/9551c71))
+* Merge pull request #7 from loash-industries/feat/upgrade-to-grpc-support ([68d7e92](https://github.com/loash-industries/keyspace/commit/68d7e92)), closes [#7](https://github.com/loash-industries/keyspace/issues/7)
+
 ## 4.0.0 (2026-07-09)
 
 * Merge pull request #6 from loash-industries/feat/upgrade-to-grpc-support ([99e4b5d](https://github.com/loash-industries/keyspace/commit/99e4b5d)), closes [#6](https://github.com/loash-industries/keyspace/issues/6)
