@@ -1,3 +1,7 @@
+## <small>5.0.3 (2026-08-05)</small>
+
+* fix: cicd ([0616954](https://github.com/loash-industries/keyspace/commit/0616954))
+
 ## <small>5.0.2 (2026-08-05)</small>
 
 * fix: cicd ([6bb0f99](https://github.com/loash-industries/keyspace/commit/6bb0f99))
