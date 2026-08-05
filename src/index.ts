@@ -12,6 +12,7 @@ export {
   LOCATIONS_SCHEMA_NAME,
   LOCATIONS_SCHEMA_VERSION,
   WARP_IN_MAX_LENGTH,
+  TRANSPONDER_CODE_MAX_LENGTH,
 } from './locations'
 export type {
   Principal,
@@ -39,6 +40,7 @@ export type {
   S3ObjectStoreClientConfig,
 } from './storage'
 export type {
+  TransponderSetting,
   Location,
   LocationsDocument,
   LocationsClientConfig,

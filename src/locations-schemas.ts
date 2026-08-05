@@ -4,8 +4,9 @@ import { AclClientError, AclError } from './errors'
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 export const LOCATIONS_SCHEMA_NAME = 'triex.locations' as const
-export const LOCATIONS_SCHEMA_VERSION = 2 as const
+export const LOCATIONS_SCHEMA_VERSION = 3 as const
 export const WARP_IN_MAX_LENGTH = 32 as const
+export const TRANSPONDER_CODE_MAX_LENGTH = 32 as const
 
 // ── Version schemas ────────────────────────────────────────────────────────────
 //
@@ -28,7 +29,7 @@ const DocumentSchemaV1 = z.object({
   locations: z.array(LocationSchemaV1),
 })
 
-// v2 (current): warp_in is any string ≤ 32 characters
+// v2: warp_in is any string ≤ 32 characters
 export const LocationSchemaV2 = z.object({
   id: z.string(),
   solar_system: z.string(),
@@ -44,16 +45,55 @@ export const LocationSchemaV2 = z.object({
 
 export const DocumentSchemaV2 = z.object({
   schema: z.literal(LOCATIONS_SCHEMA_NAME),
-  schema_version: z.literal(LOCATIONS_SCHEMA_VERSION),
+  schema_version: z.literal(2),
   updated_at: z.string(),
   locations: z.array(LocationSchemaV2),
 })
 
-export type Location = z.infer<typeof LocationSchemaV2>
-export type LocationsDocument = z.infer<typeof DocumentSchemaV2>
+// v3 (current): adds transponder_setting and an optional transponder_code
+export const TransponderSettingSchema = z.enum([
+  'public',
+  'tribe',
+  'transponder_code',
+])
+
+export const LocationSchemaV3 = LocationSchemaV2.extend({
+  transponder_setting: TransponderSettingSchema,
+  transponder_code: z
+    .string()
+    .max(
+      TRANSPONDER_CODE_MAX_LENGTH,
+      `transponder_code must be ≤ ${TRANSPONDER_CODE_MAX_LENGTH} characters`,
+    )
+    .regex(
+      /^[A-Za-z0-9]+$/,
+      'transponder_code must contain only letters and numbers',
+    )
+    .optional(),
+}).refine(
+  (loc) =>
+    loc.transponder_setting !== 'transponder_code' ||
+    loc.transponder_code !== undefined,
+  {
+    message:
+      'transponder_code is required when transponder_setting is "transponder_code"',
+    path: ['transponder_code'],
+  },
+)
+
+export const DocumentSchemaV3 = z.object({
+  schema: z.literal(LOCATIONS_SCHEMA_NAME),
+  schema_version: z.literal(LOCATIONS_SCHEMA_VERSION),
+  updated_at: z.string(),
+  locations: z.array(LocationSchemaV3),
+})
+
+export type TransponderSetting = z.infer<typeof TransponderSettingSchema>
+export type Location = z.infer<typeof LocationSchemaV3>
+export type LocationsDocument = z.infer<typeof DocumentSchemaV3>
 
 // Update this constant alongside LOCATIONS_SCHEMA_VERSION when bumping the schema version.
-const CURRENT_DOCUMENT_SCHEMA = DocumentSchemaV2
+const CURRENT_DOCUMENT_SCHEMA = DocumentSchemaV3
 
 // ── Migration steps ────────────────────────────────────────────────────────────
 //
@@ -91,7 +131,27 @@ const MIGRATIONS: MigrationStep[] = [
       }
     },
   },
-  // ↑ To add v3: append { fromVersion: 2, toVersion: 3, inputSchema: DocumentSchemaV2, ... }
+  {
+    // v2 → v3: transponder_setting added (public | tribe | transponder_code)
+    // with an optional transponder_code. Default existing locations to 'tribe',
+    // which matches the pre-v3 behavior of anyone-with-ACL-access visibility.
+    fromVersion: 2,
+    toVersion: 3,
+    inputSchema: DocumentSchemaV2,
+    outputSchema: DocumentSchemaV3,
+    migrate: (doc: unknown) => {
+      const v2 = doc as z.infer<typeof DocumentSchemaV2>
+      return {
+        ...v2,
+        schema_version: 3 as const,
+        locations: v2.locations.map((loc) => ({
+          ...loc,
+          transponder_setting: 'tribe' as const,
+        })),
+      }
+    },
+  },
+  // ↑ To add v4: append { fromVersion: 3, toVersion: 4, inputSchema: DocumentSchemaV3, ... }
 ]
 
 // ── Migration runner ───────────────────────────────────────────────────────────
@@ -166,7 +226,7 @@ export function migrateDocument(raw: unknown): LocationsDocument {
 // ── Write-time validation ──────────────────────────────────────────────────────
 
 export function validateLocation(location: Location): void {
-  const result = LocationSchemaV2.safeParse(location)
+  const result = LocationSchemaV3.safeParse(location)
   if (!result.success) {
     throw new AclClientError(AclError.ValidationFailed, result.error.message)
   }
