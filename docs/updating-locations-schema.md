@@ -148,3 +148,4 @@ The migrated document is returned in memory but **not automatically persisted**.
 |---------|--------|
 | 1 | Initial schema. `warp_in` stored as free-form string; `PxLx` convention assumed but not enforced. |
 | 2 | `warp_in` constrained to ≤ 32 characters. Any format accepted. Values longer than 32 chars in v1 documents are truncated during migration. |
+| 3 | `transponder_setting` added to each location (`public` \| `tribe` \| `transponder_code`), plus an optional `transponder_code` (≤ 32 alphanumeric characters, required when the setting is `transponder_code`). Migration from v2 defaults the setting to `tribe`. |

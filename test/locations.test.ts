@@ -32,6 +32,7 @@ function makeLocation(overrides: Partial<Location> = {}): Location {
     warp_in: '0,0,0',
     structure_type: 'gate',
     description: 'Test location',
+    transponder_setting: 'tribe',
     ...overrides,
   }
 }
@@ -381,6 +382,29 @@ describe('download — schema migration', () => {
     const result = await client.download()
 
     expect(result.locations[0].warp_in).toHaveLength(WARP_IN_MAX_LENGTH)
+  })
+
+  it('auto-migrates a v2 document, defaulting transponder_setting to "tribe"', async () => {
+    const v2Location: Record<string, unknown> = { ...makeLocation() }
+    delete v2Location.transponder_setting
+    const v2Doc = {
+      schema: LOCATIONS_SCHEMA_NAME,
+      schema_version: 2,
+      updated_at: new Date().toISOString(),
+      locations: [v2Location],
+    }
+    const aclClient = makeAclClient({
+      readData: (jest.fn() as any).mockResolvedValue(
+        new TextEncoder().encode(JSON.stringify(v2Doc)),
+      ),
+    })
+    const client = makeClient(aclClient)
+
+    const result = await client.download()
+
+    expect(result.schema_version).toBe(LOCATIONS_SCHEMA_VERSION)
+    expect(result.locations[0].transponder_setting).toBe('tribe')
+    expect(result.locations[0].transponder_code).toBeUndefined()
   })
 
   it('throws UnexpectedResponse for an unknown schema version', async () => {

@@ -5,6 +5,8 @@ import {
   LOCATIONS_SCHEMA_NAME,
   LOCATIONS_SCHEMA_VERSION,
   WARP_IN_MAX_LENGTH,
+  TRANSPONDER_CODE_MAX_LENGTH,
+  type TransponderSetting,
   type Location,
   type LocationsDocument,
   migrateDocument,
@@ -15,6 +17,8 @@ export {
   LOCATIONS_SCHEMA_NAME,
   LOCATIONS_SCHEMA_VERSION,
   WARP_IN_MAX_LENGTH,
+  TRANSPONDER_CODE_MAX_LENGTH,
+  type TransponderSetting,
   type Location,
   type LocationsDocument,
 }
