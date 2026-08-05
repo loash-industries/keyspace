@@ -1,3 +1,15 @@
+## 5.0.0 (2026-08-05)
+
+* Merge pull request #8 from loash-industries/feat/locations-schema-v3-transponder ([686cf45](https://github.com/loash-industries/keyspace/commit/686cf45)), closes [#8](https://github.com/loash-industries/keyspace/issues/8)
+* feat!: add transponder_setting and transponder_code to locations schema v3 ([d8b1b4c](https://github.com/loash-industries/keyspace/commit/d8b1b4c))
+
+### BREAKING CHANGE
+
+* the Location type now requires transponder_setting, so
+consumers constructing locations must supply it.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+
 ## <small>4.0.1 (2026-07-09)</small>
 
 * fix: resolution of principals ([6ee83fa](https://github.com/loash-industries/keyspace/commit/6ee83fa))
