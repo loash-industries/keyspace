@@ -1,3 +1,7 @@
+## <small>5.0.1 (2026-08-05)</small>
+
+* fix: cicd ([24c40b5](https://github.com/loash-industries/keyspace/commit/24c40b5))
+
 ## 5.0.0 (2026-08-05)
 
 * Merge pull request #8 from loash-industries/feat/locations-schema-v3-transponder ([686cf45](https://github.com/loash-industries/keyspace/commit/686cf45)), closes [#8](https://github.com/loash-industries/keyspace/issues/8)
