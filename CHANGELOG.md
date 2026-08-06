@@ -1,3 +1,16 @@
+## 6.0.0 (2026-08-06)
+
+* Merge pull request #10 from loash-industries/feat/locations-schema-v4-optional-transponder ([dbb10b4](https://github.com/loash-industries/keyspace/commit/dbb10b4)), closes [#10](https://github.com/loash-industries/keyspace/issues/10)
+* feat!: make transponder_setting optional in locations schema v4 ([b272f75](https://github.com/loash-industries/keyspace/commit/b272f75))
+
+### BREAKING CHANGE
+
+* Location.transponder_setting is now optional in the
+exported type; consumers reading it as a required field must handle
+undefined.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+
 ## <small>5.0.3 (2026-08-05)</small>
 
 * fix: cicd ([0616954](https://github.com/loash-industries/keyspace/commit/0616954))
