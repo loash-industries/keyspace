@@ -10,32 +10,34 @@ import {
   DocumentSchemaV2,
   LocationSchemaV3,
   DocumentSchemaV3,
+  LocationSchemaV4,
+  DocumentSchemaV4,
 } from '../src/locations-schemas'
 import { AclError } from '../src/errors'
 
 // ── migrateDocument ───────────────────────────────────────────────────────────
 
 describe('migrateDocument', () => {
-  const baseV3 = {
+  const baseV4 = {
     schema: LOCATIONS_SCHEMA_NAME,
     schema_version: LOCATIONS_SCHEMA_VERSION,
     updated_at: new Date().toISOString(),
     locations: [],
   }
 
-  it('passes through a valid v3 document unchanged', () => {
-    const result = migrateDocument(baseV3)
+  it('passes through a valid v4 document unchanged', () => {
+    const result = migrateDocument(baseV4)
     expect(result.schema_version).toBe(LOCATIONS_SCHEMA_VERSION)
   })
 
   it('throws UnexpectedResponse when schema name is wrong', () => {
-    expect(() => migrateDocument({ ...baseV3, schema: 'wrong' })).toThrow(
+    expect(() => migrateDocument({ ...baseV4, schema: 'wrong' })).toThrow(
       expect.objectContaining({ code: AclError.UnexpectedResponse }),
     )
   })
 
   it('throws UnexpectedResponse for an unsupported version number', () => {
-    expect(() => migrateDocument({ ...baseV3, schema_version: 99 })).toThrow(
+    expect(() => migrateDocument({ ...baseV4, schema_version: 99 })).toThrow(
       expect.objectContaining({ code: AclError.UnexpectedResponse }),
     )
   })
@@ -107,9 +109,9 @@ describe('migrateDocument', () => {
       locations: [],
     }
 
-    it('migrates a v2 document and bumps schema_version to 3', () => {
+    it('migrates a v2 document all the way to the current version', () => {
       const result = migrateDocument(baseV2)
-      expect(result.schema_version).toBe(3)
+      expect(result.schema_version).toBe(LOCATIONS_SCHEMA_VERSION)
     })
 
     it('defaults existing locations to transponder_setting "tribe" with no code', () => {
@@ -141,6 +143,59 @@ describe('migrateDocument', () => {
       )
     })
   })
+
+  describe('v3 → v4 migration', () => {
+    const baseV3 = {
+      schema: LOCATIONS_SCHEMA_NAME,
+      schema_version: 3,
+      updated_at: new Date().toISOString(),
+      locations: [],
+    }
+
+    it('migrates a v3 document and bumps schema_version to 4', () => {
+      const result = migrateDocument(baseV3)
+      expect(result.schema_version).toBe(4)
+    })
+
+    it('preserves transponder fields unchanged', () => {
+      const v3Doc = {
+        ...baseV3,
+        locations: [
+          {
+            id: 'a',
+            solar_system: 'Sol',
+            structure_type: 'gate',
+            warp_in: 'P1L0',
+            description: 'test',
+            transponder_setting: 'transponder_code',
+            transponder_code: 'Zulu99',
+          },
+        ],
+      }
+      const result = migrateDocument(v3Doc)
+      expect(result.locations[0].transponder_setting).toBe('transponder_code')
+      expect(result.locations[0].transponder_code).toBe('Zulu99')
+    })
+
+    it('throws ValidationFailed when the v3 document fails input validation', () => {
+      const corruptV3 = {
+        ...baseV3,
+        locations: [
+          {
+            id: 'a',
+            solar_system: 'Sol',
+            structure_type: 'gate',
+            warp_in: 'P1L0',
+            description: 'test',
+            // v3 requires transponder_setting — missing here
+          },
+        ],
+      }
+      expect(() => migrateDocument(corruptV3)).toThrow(
+        expect.objectContaining({ code: AclError.ValidationFailed }),
+      )
+    })
+  })
 })
 
 // ── validateLocation ──────────────────────────────────────────────────────────
@@ -159,12 +214,10 @@ describe('validateLocation', () => {
     expect(() => validateLocation(validLocation)).not.toThrow()
   })
 
-  it('throws ValidationFailed when transponder_setting is missing', () => {
+  it('does not throw when transponder_setting is omitted (no beacon)', () => {
     const withoutSetting: Record<string, unknown> = { ...validLocation }
     delete withoutSetting.transponder_setting
-    expect(() => validateLocation(withoutSetting as any)).toThrow(
-      expect.objectContaining({ code: AclError.ValidationFailed }),
-    )
+    expect(() => validateLocation(withoutSetting as any)).not.toThrow()
   })
 
   it('throws ValidationFailed for an unknown transponder_setting value', () => {
@@ -368,6 +421,68 @@ describe('DocumentSchemaV3', () => {
 
   it('accepts a valid v3 document', () => {
     const result = DocumentSchemaV3.safeParse({
+      schema: LOCATIONS_SCHEMA_NAME,
+      schema_version: 3,
+      updated_at: new Date().toISOString(),
+      locations: [],
+    })
+    expect(result.success).toBe(true)
+  })
+})
+
+describe('LocationSchemaV4', () => {
+  const base = {
+    id: 'x',
+    solar_system: 'Sol',
+    structure_type: 'gate',
+    warp_in: 'P1L0',
+    description: 'test',
+  }
+
+  it('accepts a location without any transponder fields (no beacon)', () => {
+    const result = LocationSchemaV4.safeParse(base)
+    expect(result.success).toBe(true)
+  })
+
+  it('accepts a location with a setting and no code', () => {
+    const result = LocationSchemaV4.safeParse({
+      ...base,
+      transponder_setting: 'public',
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('still rejects setting "transponder_code" without a code', () => {
+    const result = LocationSchemaV4.safeParse({
+      ...base,
+      transponder_setting: 'transponder_code',
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('still enforces the alphanumeric code format', () => {
+    const result = LocationSchemaV4.safeParse({
+      ...base,
+      transponder_setting: 'transponder_code',
+      transponder_code: 'not valid!',
+    })
+    expect(result.success).toBe(false)
+  })
+})
+
+describe('DocumentSchemaV4', () => {
+  it('rejects a document with schema_version: 3', () => {
+    const result = DocumentSchemaV4.safeParse({
+      schema: LOCATIONS_SCHEMA_NAME,
+      schema_version: 3,
+      updated_at: new Date().toISOString(),
+      locations: [],
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('accepts a valid v4 document', () => {
+    const result = DocumentSchemaV4.safeParse({
       schema: LOCATIONS_SCHEMA_NAME,
       schema_version: LOCATIONS_SCHEMA_VERSION,
       updated_at: new Date().toISOString(),

@@ -4,7 +4,7 @@ import { AclClientError, AclError } from './errors'
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 export const LOCATIONS_SCHEMA_NAME = 'triex.locations' as const
-export const LOCATIONS_SCHEMA_VERSION = 3 as const
+export const LOCATIONS_SCHEMA_VERSION = 4 as const
 export const WARP_IN_MAX_LENGTH = 32 as const
 export const TRANSPONDER_CODE_MAX_LENGTH = 32 as const
 
@@ -50,7 +50,7 @@ export const DocumentSchemaV2 = z.object({
   locations: z.array(LocationSchemaV2),
 })
 
-// v3 (current): adds transponder_setting and an optional transponder_code
+// v3: adds transponder_setting and an optional transponder_code
 export const TransponderSettingSchema = z.enum([
   'public',
   'tribe',
@@ -83,17 +83,50 @@ export const LocationSchemaV3 = LocationSchemaV2.extend({
 
 export const DocumentSchemaV3 = z.object({
   schema: z.literal(LOCATIONS_SCHEMA_NAME),
-  schema_version: z.literal(LOCATIONS_SCHEMA_VERSION),
+  schema_version: z.literal(3),
   updated_at: z.string(),
   locations: z.array(LocationSchemaV3),
 })
 
+// v4 (current): transponder_setting is now optional — structures without a
+// warp-in transponder beacon simply omit it (and the code alongside it).
+export const LocationSchemaV4 = LocationSchemaV2.extend({
+  transponder_setting: TransponderSettingSchema.optional(),
+  transponder_code: z
+    .string()
+    .max(
+      TRANSPONDER_CODE_MAX_LENGTH,
+      `transponder_code must be ≤ ${TRANSPONDER_CODE_MAX_LENGTH} characters`,
+    )
+    .regex(
+      /^[A-Za-z0-9]+$/,
+      'transponder_code must contain only letters and numbers',
+    )
+    .optional(),
+}).refine(
+  (loc) =>
+    loc.transponder_setting !== 'transponder_code' ||
+    loc.transponder_code !== undefined,
+  {
+    message:
+      'transponder_code is required when transponder_setting is "transponder_code"',
+    path: ['transponder_code'],
+  },
+)
+
+export const DocumentSchemaV4 = z.object({
+  schema: z.literal(LOCATIONS_SCHEMA_NAME),
+  schema_version: z.literal(LOCATIONS_SCHEMA_VERSION),
+  updated_at: z.string(),
+  locations: z.array(LocationSchemaV4),
+})
+
 export type TransponderSetting = z.infer<typeof TransponderSettingSchema>
-export type Location = z.infer<typeof LocationSchemaV3>
-export type LocationsDocument = z.infer<typeof DocumentSchemaV3>
+export type Location = z.infer<typeof LocationSchemaV4>
+export type LocationsDocument = z.infer<typeof DocumentSchemaV4>
 
 // Update this constant alongside LOCATIONS_SCHEMA_VERSION when bumping the schema version.
-const CURRENT_DOCUMENT_SCHEMA = DocumentSchemaV3
+const CURRENT_DOCUMENT_SCHEMA = DocumentSchemaV4
 
 // ── Migration steps ────────────────────────────────────────────────────────────
 //
@@ -151,7 +184,23 @@ const MIGRATIONS: MigrationStep[] = [
       }
     },
   },
-  // ↑ To add v4: append { fromVersion: 3, toVersion: 4, inputSchema: DocumentSchemaV3, ... }
+  {
+    // v3 → v4: transponder_setting relaxed from required to optional.
+    // Pure relaxation — every valid v3 document is already a valid v4
+    // document, so only the version stamp changes.
+    fromVersion: 3,
+    toVersion: 4,
+    inputSchema: DocumentSchemaV3,
+    outputSchema: DocumentSchemaV4,
+    migrate: (doc: unknown) => {
+      const v3 = doc as z.infer<typeof DocumentSchemaV3>
+      return {
+        ...v3,
+        schema_version: 4 as const,
+      }
+    },
+  },
+  // ↑ To add v5: append { fromVersion: 4, toVersion: 5, inputSchema: DocumentSchemaV4, ... }
 ]
 
 // ── Migration runner ───────────────────────────────────────────────────────────
@@ -226,7 +275,7 @@ export function migrateDocument(raw: unknown): LocationsDocument {
 // ── Write-time validation ──────────────────────────────────────────────────────
 
 export function validateLocation(location: Location): void {
-  const result = LocationSchemaV3.safeParse(location)
+  const result = LocationSchemaV4.safeParse(location)
   if (!result.success) {
     throw new AclClientError(AclError.ValidationFailed, result.error.message)
   }
