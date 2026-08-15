@@ -13,7 +13,28 @@ export type Role = Principal
 // ── Keyspace role ─────────────────────────────────────────────────────────────
 // Mirrors armature_vault::keyspace::Role
 
-export type KeyspaceRole = 'Grant' | 'Read' | 'Write'
+/**
+ * The three roles a principal can hold on a Keyspace.
+ *
+ * Exposed as both a runtime object *and* a type — the same shape as
+ * {@link AclError} — so callers can reference `KeyspaceRole.Read` for
+ * discoverability and autocompletion:
+ *
+ * ```ts
+ * await aclClient.grant({ aclId, keyspaceRole: KeyspaceRole.Read, principal, ouId })
+ * ```
+ *
+ * The companion type below resolves to the `'Grant' | 'Read' | 'Write'`
+ * string-literal union, so passing the bare string (`keyspaceRole: 'Read'`)
+ * keeps working unchanged — this is purely additive.
+ */
+export const KeyspaceRole = {
+  Grant: 'Grant',
+  Read: 'Read',
+  Write: 'Write',
+} as const
+
+export type KeyspaceRole = (typeof KeyspaceRole)[keyof typeof KeyspaceRole]
 
 // ── Keyspace state ────────────────────────────────────────────────────────────
 
