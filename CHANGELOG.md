@@ -1,3 +1,15 @@
+## 7.0.0 (2026-08-15)
+
+* Merge pull request #11 from loash-industries/feat/keyspace-api-key-auth ([1fb7a38](https://github.com/loash-industries/keyspace/commit/1fb7a38)), closes [#11](https://github.com/loash-industries/keyspace/issues/11)
+* feat!: require Trinary Exchange API key for indexer auth ([3034b14](https://github.com/loash-industries/keyspace/commit/3034b14))
+
+### BREAKING CHANGE
+
+* `apiKey` is now a required field on AclClientConfig. Every
+`new AclClient({...})` call site must supply a Trinary Exchange API key.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
 ## 6.0.0 (2026-08-06)
 
 * Merge pull request #10 from loash-industries/feat/locations-schema-v4-optional-transponder ([dbb10b4](https://github.com/loash-industries/keyspace/commit/dbb10b4)), closes [#10](https://github.com/loash-industries/keyspace/issues/10)
