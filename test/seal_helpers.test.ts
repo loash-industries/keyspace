@@ -61,7 +61,7 @@ const { sealEncrypt, sealDecrypt, clearSessionCache } =
 const PKG = '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef'
 const KEYSPACE_ID =
   '0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20'
-const DAO_ID =
+const OU_ID =
   '0xaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd'
 const WALLET =
   '0x1111111111111111111111111111111111111111111111111111111111111111'
@@ -85,7 +85,7 @@ function makeDecryptOpts(overrides: Record<string, any> = {}) {
   return {
     packageId: PKG,
     keyspaceId: KEYSPACE_ID,
-    daoId: DAO_ID,
+    ouId: OU_ID,
     encryptedData: ENCRYPTED,
     walletAddress: WALLET,
     signPersonalMessage: (jest.fn() as any).mockResolvedValue('sig'),

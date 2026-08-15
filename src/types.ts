@@ -5,7 +5,7 @@ import type { Transaction } from '@mysten/sui/transactions'
 
 export type Principal =
   | { type: 'player'; address: string }
-  | { type: 'ou'; daoId: string }
+  | { type: 'ou'; ouId: string }
 
 /** @deprecated Use Principal */
 export type Role = Principal
@@ -127,10 +127,11 @@ export interface AclClientConfig {
   /** Encrypted blob storage backend */
   storageAdapter: StorageAdapter
   /**
-   * Default DAO object ID to pass for operations that require `&DAO`.
-   * Can be overridden per-method. Required for grant/revoke/write/read ops.
+   * Default OU object ID to pass for operations that require the on-chain
+   * `&DAO` witness. Can be overridden per-method. Required for
+   * grant/revoke/write/read ops.
    */
-  daoId?: string
+  ouId?: string
   /**
    * REST indexer URL for getAccessibleAcls.
    * Defaults to the Trinary Exchange gateway (`https://api.trinary.exchange`).

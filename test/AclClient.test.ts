@@ -41,7 +41,7 @@ const { AclClient, createPublicAclClient } = await import('../src/AclClient')
 const PKG = '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef'
 const ACL_ID =
   '0x0000000000000000000000000000000000000000000000000000000000001001'
-const DAO_ID =
+const OU_ID =
   '0x0000000000000000000000000000000000000000000000000000000000001002'
 const ENTRY_ID =
   '0x0000000000000000000000000000000000000000000000000000000000001003'
@@ -113,7 +113,7 @@ function makeConfig(overrides: Partial<AclClientConfig> = {}): AclClientConfig {
     packageId: PKG,
     executor: makeExecutor(),
     storageAdapter: makeStorageAdapter(),
-    daoId: DAO_ID,
+    ouId: OU_ID,
     apiKey: 'sk-test-key',
     ...overrides,
   }
@@ -208,7 +208,7 @@ describe('createPublicAclClient', () => {
       packageId: full.packageId,
       executor: full.executor,
       storageAdapter: full.storageAdapter,
-      daoId: full.daoId,
+      ouId: full.ouId,
       indexerUrl: full.indexerUrl,
       sessionKeyTtlMin: full.sessionKeyTtlMin,
       ...overrides,
@@ -264,23 +264,23 @@ describe('hasAccess', () => {
     )
   })
 
-  it('returns true for an OU principal when matching daoId is provided', async () => {
+  it('returns true for an OU principal when matching ouId is provided', async () => {
     mockFetchKeyspaceDetail.mockResolvedValue(
       makeAclDetail({
-        readPrincipals: [{ type: 'ou', daoId: DAO_ID }],
+        readPrincipals: [{ type: 'ou', ouId: OU_ID }],
         roles: [],
       }),
     )
     const client = makeClient()
     expect(
-      await client.hasAccess({ aclId: ACL_ID, address: MEMBER, daoId: DAO_ID }),
+      await client.hasAccess({ aclId: ACL_ID, address: MEMBER, ouId: OU_ID }),
     ).toBe(true)
   })
 
-  it('returns false for an OU principal when daoId is not provided', async () => {
+  it('returns false for an OU principal when ouId is not provided', async () => {
     mockFetchKeyspaceDetail.mockResolvedValue(
       makeAclDetail({
-        readPrincipals: [{ type: 'ou', daoId: DAO_ID }],
+        readPrincipals: [{ type: 'ou', ouId: OU_ID }],
         roles: [],
       }),
     )
@@ -317,29 +317,29 @@ describe('grant', () => {
     expect(result).toEqual({ epoch: 4 })
   })
 
-  it('throws DaoIdRequired when no daoId is configured', async () => {
-    const client = makeClient({ daoId: undefined })
+  it('throws OuIdRequired when no ouId is configured', async () => {
+    const client = makeClient({ ouId: undefined })
     await expect(
       client.grant({
         aclId: ACL_ID,
         keyspaceRole: 'Read',
         principal: { type: 'player', address: MEMBER },
       }),
-    ).rejects.toMatchObject({ code: AclError.DaoIdRequired })
+    ).rejects.toMatchObject({ code: AclError.OuIdRequired })
   })
 
-  it('uses per-method daoId override', async () => {
+  it('uses per-method ouId override', async () => {
     const executor = makeExecutor()
     mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 2 }))
-    const OVERRIDE_DAO =
+    const OVERRIDE_OU =
       '0x0000000000000000000000000000000000000000000000000000000000009999'
-    const client = makeClient({ executor, daoId: undefined })
+    const client = makeClient({ executor, ouId: undefined })
 
     const result = await client.grant({
       aclId: ACL_ID,
       keyspaceRole: 'Write',
       principal: { type: 'player', address: MEMBER },
-      daoId: OVERRIDE_DAO,
+      ouId: OVERRIDE_OU,
     })
 
     expect(executor).toHaveBeenCalledTimes(1)
@@ -416,10 +416,10 @@ describe('createAcl', () => {
   })
 })
 
-// ── createAclForDao ───────────────────────────────────────────────────────────
+// ── createAclForOu ───────────────────────────────────────────────────────────
 
-describe('createAclForDao', () => {
-  const ouPrincipal: Principal = { type: 'ou', daoId: DAO_ID }
+describe('createAclForOu', () => {
+  const ouPrincipal: Principal = { type: 'ou', ouId: OU_ID }
 
   it('creates an org-linked ACL and returns aclId and epoch', async () => {
     const executor = (jest.fn() as any).mockResolvedValue({
@@ -435,9 +435,9 @@ describe('createAclForDao', () => {
     mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 0 }))
     const client = makeClient({ executor })
 
-    const result = await client.createAclForDao({
+    const result = await client.createAclForOu({
       name: 'Org ACL',
-      daoId: DAO_ID,
+      ouId: OU_ID,
       grantPrincipals: [ouPrincipal],
       readPrincipals: [ouPrincipal],
       writePrincipals: [ouPrincipal],
@@ -462,9 +462,9 @@ describe('createAclForDao', () => {
     mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 0 }))
     const client = makeClient({ executor })
 
-    const result = await client.createAclForDao({
+    const result = await client.createAclForOu({
       name: 'Grant-only ACL',
-      daoId: DAO_ID,
+      ouId: OU_ID,
       grantPrincipals: [ouPrincipal],
     })
 
@@ -479,9 +479,9 @@ describe('createAclForDao', () => {
     const client = makeClient({ executor })
 
     await expect(
-      client.createAclForDao({
+      client.createAclForOu({
         name: 'Org ACL',
-        daoId: DAO_ID,
+        ouId: OU_ID,
         grantPrincipals: [ouPrincipal],
       }),
     ).rejects.toMatchObject({ code: AclError.UnexpectedResponse })
@@ -504,8 +504,8 @@ describe('editDescription', () => {
     expect(executor).toHaveBeenCalledTimes(1)
   })
 
-  it('throws DaoIdRequired when no daoId is configured or provided', async () => {
-    const client = makeClient({ daoId: undefined })
+  it('throws OuIdRequired when no ouId is configured or provided', async () => {
+    const client = makeClient({ ouId: undefined })
 
     await expect(
       client.editDescription({
@@ -513,7 +513,7 @@ describe('editDescription', () => {
         entryId: ENTRY_ID,
         newDescription: 'x',
       }),
-    ).rejects.toMatchObject({ code: AclError.DaoIdRequired })
+    ).rejects.toMatchObject({ code: AclError.OuIdRequired })
   })
 })
 

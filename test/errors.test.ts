@@ -3,7 +3,7 @@ import { AclError, AclClientError } from '../src/errors'
 describe('AclError', () => {
   it('has the expected string values', () => {
     expect(AclError.AccessDenied).toBe('ACL_ACCESS_DENIED')
-    expect(AclError.DaoIdRequired).toBe('ACL_DAO_ID_REQUIRED')
+    expect(AclError.OuIdRequired).toBe('ACL_OU_ID_REQUIRED')
     expect(AclError.AlreadyCurrentEpoch).toBe('ACL_ALREADY_CURRENT_EPOCH')
     expect(AclError.EpochMismatch).toBe('ACL_EPOCH_MISMATCH')
     expect(AclError.RoleAlreadyExists).toBe('ACL_ROLE_EXISTS')

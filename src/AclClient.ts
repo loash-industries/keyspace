@@ -14,7 +14,7 @@ import type {
 import { AclClientError, AclError } from './errors'
 import {
   createKeyspaceTx,
-  createKeyspaceForDaoTx,
+  createKeyspaceForOuTx,
   editDescriptionTx,
   editEntryTx,
   grantTx,
@@ -39,7 +39,7 @@ export class AclClient {
   private readonly packageId: string
   private readonly executor: AclClientConfig['executor']
   private readonly storageAdapter: AclClientConfig['storageAdapter']
-  private readonly defaultDaoId?: string
+  private readonly defaultOuId?: string
   private readonly indexerUrl: string
   private readonly apiKey: string
   private readonly sessionKeyTtlMin: number
@@ -50,7 +50,7 @@ export class AclClient {
     this.packageId = config.packageId
     this.executor = config.executor
     this.storageAdapter = config.storageAdapter
-    this.defaultDaoId = config.daoId
+    this.defaultOuId = config.ouId
     this.indexerUrl = config.indexerUrl ?? DEFAULT_INDEXER_URL
     this.apiKey = config.apiKey
     this.sessionKeyTtlMin = config.sessionKeyTtlMin ?? 10
@@ -58,12 +58,12 @@ export class AclClient {
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
-  private requireDaoId(override?: string): string {
-    const id = override ?? this.defaultDaoId
+  private requireOuId(override?: string): string {
+    const id = override ?? this.defaultOuId
     if (!id) {
       throw new AclClientError(
-        AclError.DaoIdRequired,
-        'This operation requires a daoId. Pass it per-method or set daoId in AclClientConfig.',
+        AclError.OuIdRequired,
+        'This operation requires an ouId. Pass it per-method or set ouId in AclClientConfig.',
       )
     }
     return id
@@ -92,28 +92,28 @@ export class AclClient {
   }
 
   /**
-   * Create a DAO-linked Keyspace.  The DAO's on-chain identity is recorded in
+   * Create an OU-linked Keyspace.  The OU's on-chain identity is recorded in
    * the `KeyspaceCreated` event as `registrant_dao_id` so an indexer can map
-   * DAO → keyspaces without replaying Grant-role membership lists.
+   * OU → keyspaces without replaying Grant-role membership lists.
    *
    * The Move entry point takes a `&DAO` witness and calls
-   * `is_governance_member`, so both the DAO reference and the caller's
+   * `is_governance_member`, so both the OU reference and the caller's
    * membership are verified on-chain — `registrant_dao_id` cannot be spoofed.
    *
    * `grantPrincipals` must be non-empty (mirrors `EEmptyGrantPrincipals`).
    * `readPrincipals` and `writePrincipals` default to empty and can be
    * populated later via `grant`.
    */
-  async createAclForDao(opts: {
+  async createAclForOu(opts: {
     name: string
-    daoId: string
+    ouId: string
     grantPrincipals: Principal[]
     readPrincipals?: Principal[]
     writePrincipals?: Principal[]
   }): Promise<CreateAclResult> {
-    const tx = createKeyspaceForDaoTx(
+    const tx = createKeyspaceForOuTx(
       this.packageId,
-      opts.daoId,
+      opts.ouId,
       opts.name,
       opts.grantPrincipals,
       opts.readPrincipals ?? [],
@@ -129,7 +129,7 @@ export class AclClient {
     if (!created) {
       throw new AclClientError(
         AclError.UnexpectedResponse,
-        'createAclForDao: expected Keyspace in objectChanges. Ensure executor returns showObjectChanges: true.',
+        'createAclForOu: expected Keyspace in objectChanges. Ensure executor returns showObjectChanges: true.',
       )
     }
 
@@ -163,19 +163,19 @@ export class AclClient {
   /**
    * Grant `principal` the `keyspaceRole` on `aclId`.
    * Caller must already hold the Grant role.
-   * `daoId` overrides the config-level default.
+   * `ouId` overrides the config-level default.
    */
   async grant(opts: {
     aclId: string
     keyspaceRole: KeyspaceRole
     principal: Principal
-    daoId?: string
+    ouId?: string
   }): Promise<{ epoch: number }> {
-    const daoId = this.requireDaoId(opts.daoId)
+    const ouId = this.requireOuId(opts.ouId)
     const tx = grantTx(
       this.packageId,
       opts.aclId,
-      daoId,
+      ouId,
       opts.keyspaceRole,
       opts.principal,
     )
@@ -192,13 +192,13 @@ export class AclClient {
     aclId: string
     keyspaceRole: KeyspaceRole
     principal: Principal
-    daoId?: string
+    ouId?: string
   }): Promise<{ epoch: number }> {
-    const daoId = this.requireDaoId(opts.daoId)
+    const ouId = this.requireOuId(opts.ouId)
     const tx = revokeTx(
       this.packageId,
       opts.aclId,
-      daoId,
+      ouId,
       opts.keyspaceRole,
       opts.principal,
     )
@@ -209,19 +209,19 @@ export class AclClient {
 
   /**
    * Returns true if `address` holds Read access either directly as a player
-   * principal, or indirectly via an OU principal whose `daoId` is supplied.
-   * Pass `daoId` to check OU membership; omit to check player membership only.
+   * principal, or indirectly via an OU principal whose `ouId` is supplied.
+   * Pass `ouId` to check OU membership; omit to check player membership only.
    */
   async hasAccess(opts: {
     aclId: string
     address: string
-    daoId?: string
+    ouId?: string
   }): Promise<boolean> {
     const acl = await this.getAcl(opts.aclId)
     return acl.readPrincipals.some(
       (p) =>
         (p.type === 'player' && p.address === opts.address) ||
-        (p.type === 'ou' && opts.daoId !== undefined && p.daoId === opts.daoId),
+        (p.type === 'ou' && opts.ouId !== undefined && p.ouId === opts.ouId),
     )
   }
 
@@ -231,14 +231,14 @@ export class AclClient {
     aclId: string
     entryId: string
     newDescription: string
-    daoId?: string
+    ouId?: string
   }): Promise<void> {
-    const daoId = this.requireDaoId(opts.daoId)
+    const ouId = this.requireOuId(opts.ouId)
     const tx = editDescriptionTx(
       this.packageId,
       opts.aclId,
       opts.entryId,
-      daoId,
+      ouId,
       opts.newDescription,
     )
     await this.executor(tx)
@@ -250,9 +250,9 @@ export class AclClient {
     description: string
     walletAddress: string
     signPersonalMessage: SignPersonalMessageFn
-    daoId?: string
+    ouId?: string
   }): Promise<WriteResult> {
-    const daoId = this.requireDaoId(opts.daoId)
+    const ouId = this.requireOuId(opts.ouId)
     const meta = await this.getAclMeta(opts.aclId)
 
     const data =
@@ -272,7 +272,7 @@ export class AclClient {
     const tx = publishEntryTx(
       this.packageId,
       opts.aclId,
-      daoId,
+      ouId,
       uri,
       opts.description,
     )
@@ -298,9 +298,9 @@ export class AclClient {
     entryId: string
     walletAddress: string
     signPersonalMessage: SignPersonalMessageFn
-    daoId?: string
+    ouId?: string
   }): Promise<Uint8Array> {
-    const daoId = this.requireDaoId(opts.daoId)
+    const ouId = this.requireOuId(opts.ouId)
     const meta = await this.getAclMeta(opts.aclId)
     const entry = await fetchEncryptedEntry(
       this.suiClient,
@@ -319,7 +319,7 @@ export class AclClient {
     return sealDecrypt({
       packageId: this.packageId,
       keyspaceId: opts.aclId,
-      daoId,
+      ouId,
       encryptedData: encrypted,
       walletAddress: opts.walletAddress,
       signPersonalMessage: opts.signPersonalMessage,
@@ -335,9 +335,9 @@ export class AclClient {
     newPlaintext: Uint8Array | string
     walletAddress: string
     signPersonalMessage: SignPersonalMessageFn
-    daoId?: string
+    ouId?: string
   }): Promise<WriteResult> {
-    const daoId = this.requireDaoId(opts.daoId)
+    const ouId = this.requireOuId(opts.ouId)
     const meta = await this.getAclMeta(opts.aclId)
 
     const data =
@@ -354,7 +354,7 @@ export class AclClient {
 
     const uri = await this.storageAdapter.upload(encrypted)
 
-    const tx = editEntryTx(this.packageId, opts.aclId, opts.entryId, daoId, uri)
+    const tx = editEntryTx(this.packageId, opts.aclId, opts.entryId, ouId, uri)
     await this.executor(tx)
 
     return { entryId: opts.entryId, uri, epoch: meta.epoch }
@@ -365,9 +365,9 @@ export class AclClient {
     entryId: string
     walletAddress: string
     signPersonalMessage: SignPersonalMessageFn
-    daoId?: string
+    ouId?: string
   }): Promise<RotateResult> {
-    const daoId = this.requireDaoId(opts.daoId)
+    const ouId = this.requireOuId(opts.ouId)
     const meta = await this.getAclMeta(opts.aclId)
     const entry = await fetchEncryptedEntry(
       this.suiClient,
@@ -392,7 +392,7 @@ export class AclClient {
       entryId: opts.entryId,
       walletAddress: opts.walletAddress,
       signPersonalMessage: opts.signPersonalMessage,
-      daoId,
+      ouId,
     })
 
     const encrypted = await sealEncrypt(
@@ -408,7 +408,7 @@ export class AclClient {
       this.packageId,
       opts.aclId,
       opts.entryId,
-      daoId,
+      ouId,
       newUri,
     )
     await this.executor(tx)
@@ -420,10 +420,10 @@ export class AclClient {
     aclId: string
     walletAddress: string
     signPersonalMessage: SignPersonalMessageFn
-    daoId?: string
+    ouId?: string
     onProgress?: (done: number, total: number) => void
   }): Promise<RotateAllResult> {
-    this.requireDaoId(opts.daoId)
+    this.requireOuId(opts.ouId)
     const stale = await this.getStaleEntries(opts.aclId)
     let rotated = 0
     let skipped = 0
@@ -435,7 +435,7 @@ export class AclClient {
           entryId: entry.id,
           walletAddress: opts.walletAddress,
           signPersonalMessage: opts.signPersonalMessage,
-          daoId: opts.daoId,
+          ouId: opts.ouId,
         })
         rotated++
       } catch (e) {
@@ -523,4 +523,115 @@ export function createPublicAclClient(
   config: Omit<AclClientConfig, 'apiKey'>,
 ): PublicAclClient {
   return new AclClient({ ...config, apiKey: '' })
+}
+
+// ── Read-only usage ─────────────────────────────────────────────────────────
+
+/**
+ * Config for `ReadOnlyAclClient`. Unlike `AclClientConfig`, `packageId`,
+ * `executor`, `storageAdapter`, and `sealClient` are all omitted — none of
+ * `ReadOnlyAclClient`'s methods sign/submit transactions, touch encrypted
+ * blob storage, or decrypt entries, so there's nothing to construct those
+ * with. `indexerUrl` and `apiKey` are optional for the same reason
+ * `getAccessibleAcls` treats them as optional on the full client: an indexer
+ * that serves public reads without a key still works, it just needs
+ * `indexerUrl` to point at it.
+ */
+export interface ReadOnlyAclClientConfig {
+  /** @mysten/sui SuiClient instance */
+  suiClient: AclClientConfig['suiClient']
+  /**
+   * REST indexer URL for getAccessibleAcls.
+   * Defaults to the Trinary Exchange gateway (`https://api.trinary.exchange`).
+   */
+  indexerUrl?: string
+  /**
+   * Trinary Exchange API key used to authenticate indexer requests. Sent as
+   * the `x-api-key` header. Omit if the indexer allows unauthenticated reads.
+   */
+  apiKey?: string
+}
+
+/**
+ * A read-only view over a Keyspace: on-chain lookups plus the indexer-backed
+ * `getAccessibleAcls` call, with no ability to create/grant/revoke/write.
+ * Takes no `packageId`, `executor`, `storageAdapter`, or `sealClient` — this
+ * is meant for callers (e.g. a read API or a UI's server route) that only
+ * ever need to look up ACL state, never mutate it or decrypt entries.
+ */
+export class ReadOnlyAclClient {
+  private readonly suiClient: AclClientConfig['suiClient']
+  private readonly indexerUrl: string
+  private readonly apiKey?: string
+
+  constructor(config: ReadOnlyAclClientConfig) {
+    this.suiClient = config.suiClient
+    this.indexerUrl = config.indexerUrl ?? DEFAULT_INDEXER_URL
+    this.apiKey = config.apiKey
+  }
+
+  async getAcl(aclId: string): Promise<AclDetail> {
+    const detail = await fetchKeyspaceDetail(this.suiClient, aclId)
+    if (!detail) {
+      throw new AclClientError(
+        AclError.EntryNotFound,
+        `Keyspace not found: ${aclId}`,
+      )
+    }
+    return detail
+  }
+
+  async getAccessibleAcls(address: string): Promise<string[]> {
+    return fetchAccessibleKeyspaces(this.indexerUrl, address, this.apiKey ?? '')
+  }
+
+  /**
+   * Returns true if `address` holds Read access either directly as a player
+   * principal, or indirectly via an OU principal whose `ouId` is supplied.
+   * Pass `ouId` to check OU membership; omit to check player membership only.
+   */
+  async hasAccess(opts: {
+    aclId: string
+    address: string
+    ouId?: string
+  }): Promise<boolean> {
+    const acl = await this.getAcl(opts.aclId)
+    return acl.readPrincipals.some(
+      (p) =>
+        (p.type === 'player' && p.address === opts.address) ||
+        (p.type === 'ou' && opts.ouId !== undefined && p.ouId === opts.ouId),
+    )
+  }
+
+  async getStaleEntries(aclId: string): Promise<EntryMeta[]> {
+    const detail = await this.getAcl(aclId)
+    return detail.entries.filter((e) => e.isStale)
+  }
+
+  async isEntryStale(opts: { aclId: string; entryId: string }): Promise<boolean> {
+    const meta = await this.getAclMeta(opts.aclId)
+    const entry = await fetchEncryptedEntry(
+      this.suiClient,
+      opts.entryId,
+      meta.epoch,
+    )
+    if (!entry) {
+      throw new AclClientError(
+        AclError.EntryNotFound,
+        `Entry not found: ${opts.entryId}`,
+      )
+    }
+    return entry.isStale
+  }
+
+  private async getAclMeta(aclId: string): Promise<AclMeta> {
+    const meta = await fetchKeyspaceMeta(this.suiClient, aclId)
+    if (!meta) {
+      throw new AclClientError(
+        AclError.EntryNotFound,
+        `Keyspace not found: ${aclId}`,
+      )
+    }
+    return meta
+  }
 }

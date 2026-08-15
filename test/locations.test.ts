@@ -16,7 +16,7 @@ const ACL_ID =
   '0x0000000000000000000000000000000000000000000000000000000000001001'
 const ENTRY_ID =
   '0x0000000000000000000000000000000000000000000000000000000000001002'
-const DAO_ID =
+const OU_ID =
   '0x0000000000000000000000000000000000000000000000000000000000001003'
 const WALLET =
   '0x0000000000000000000000000000000000000000000000000000000000001004'
@@ -25,7 +25,10 @@ const SIGN_FN = (jest.fn() as any).mockResolvedValue('sig')
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function makeLocation(overrides: Partial<Location> = {}): Location {
+// Loosely typed so callers can override any combination of fields (including
+// mismatched structure_type/transponder_setting pairs to exercise validation
+// failures) — the cast trusts the caller, same as JSON coming off the wire.
+function makeLocation(overrides: Record<string, unknown> = {}): Location {
   return {
     id: 'loc-1',
     solar_system: 'Sol',
@@ -34,7 +37,7 @@ function makeLocation(overrides: Partial<Location> = {}): Location {
     description: 'Test location',
     transponder_setting: 'tribe',
     ...overrides,
-  }
+  } as Location
 }
 
 function makeDoc(
@@ -82,7 +85,7 @@ function makeClient(aclClient = makeAclClient()) {
     entryId: ENTRY_ID,
     walletAddress: WALLET,
     signPersonalMessage: SIGN_FN,
-    daoId: DAO_ID,
+    ouId: OU_ID,
   })
 }
 
@@ -126,7 +129,7 @@ describe('download', () => {
     })
   })
 
-  it('passes daoId through to readData', async () => {
+  it('passes ouId through to readData', async () => {
     const doc = makeDoc()
     const aclClient = makeAclClient({
       readData: (jest.fn() as any).mockResolvedValue(encodeDoc(doc)),
@@ -136,7 +139,7 @@ describe('download', () => {
     await client.download()
 
     expect(aclClient.readData).toHaveBeenCalledWith(
-      expect.objectContaining({ daoId: DAO_ID }),
+      expect.objectContaining({ ouId: OU_ID }),
     )
   })
 })
@@ -324,6 +327,62 @@ describe('addLocation — warp_in validation', () => {
   })
 })
 
+describe('updateLocation — structure_type union', () => {
+  it('switching from gate to catapult without a destination fails validation', async () => {
+    const loc = makeLocation({ id: 'x', structure_type: 'gate' })
+    const doc = makeDoc([loc])
+    const aclClient = makeAclClient({
+      readData: (jest.fn() as any).mockResolvedValue(encodeDoc(doc)),
+    })
+    const client = makeClient(aclClient)
+
+    await expect(
+      client.updateLocation('x', { structure_type: 'catapult' }),
+    ).rejects.toMatchObject({ code: AclError.ValidationFailed })
+  })
+
+  it('switching from gate to catapult with a destination succeeds', async () => {
+    const loc = makeLocation({ id: 'x', structure_type: 'gate' })
+    const doc = makeDoc([loc])
+    const aclClient = makeAclClient({
+      readData: (jest.fn() as any).mockResolvedValue(encodeDoc(doc)),
+    })
+    const client = makeClient(aclClient)
+
+    await client.updateLocation('x', {
+      structure_type: 'catapult',
+      destination_solar_system: 'Amarr',
+    })
+
+    const call = aclClient.editData.mock.calls[0][0]
+    const saved: LocationsDocument = JSON.parse(call.newPlaintext)
+    expect(saved.locations[0]).toMatchObject({
+      structure_type: 'catapult',
+      destination_solar_system: 'Amarr',
+    })
+  })
+
+  it('switching from catapult back to gate drops the stale destination', async () => {
+    const loc = makeLocation({
+      id: 'x',
+      structure_type: 'catapult',
+      destination_solar_system: 'Amarr',
+    })
+    const doc = makeDoc([loc])
+    const aclClient = makeAclClient({
+      readData: (jest.fn() as any).mockResolvedValue(encodeDoc(doc)),
+    })
+    const client = makeClient(aclClient)
+
+    await client.updateLocation('x', { structure_type: 'gate' })
+
+    const call = aclClient.editData.mock.calls[0][0]
+    const saved: LocationsDocument = JSON.parse(call.newPlaintext)
+    expect(saved.locations[0].structure_type).toBe('gate')
+    expect((saved.locations[0] as any).destination_solar_system).toBeUndefined()
+  })
+})
+
 describe('updateLocation — warp_in validation', () => {
   it('rejects an update that would exceed 32 characters', async () => {
     const loc = makeLocation({ id: 'x', warp_in: 'short' })
@@ -404,7 +463,7 @@ describe('download — schema migration', () => {
 
     expect(result.schema_version).toBe(LOCATIONS_SCHEMA_VERSION)
     expect(result.locations[0].transponder_setting).toBe('tribe')
-    expect(result.locations[0].transponder_code).toBeUndefined()
+    expect((result.locations[0] as any).transponder_code).toBeUndefined()
   })
 
   it('throws UnexpectedResponse for an unknown schema version', async () => {
@@ -449,7 +508,7 @@ describe('LocationsClient.create', () => {
       aclId: ACL_ID,
       walletAddress: WALLET,
       signPersonalMessage: SIGN_FN,
-      daoId: DAO_ID,
+      ouId: OU_ID,
     })
 
     expect(aclClient.writeData).toHaveBeenCalledTimes(1)
@@ -474,7 +533,7 @@ describe('LocationsClient.create', () => {
       aclId: ACL_ID,
       walletAddress: WALLET,
       signPersonalMessage: SIGN_FN,
-      daoId: DAO_ID,
+      ouId: OU_ID,
     })
 
     // Verify the returned client uses the new entryId by calling reencrypt

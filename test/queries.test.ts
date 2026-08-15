@@ -16,7 +16,7 @@ const MEMBER1 =
   '0x0000000000000000000000000000000000000000000000000000000000001001'
 const MEMBER2 =
   '0x0000000000000000000000000000000000000000000000000000000000001002'
-const DAO_ID =
+const OU_ID =
   '0x0000000000000000000000000000000000000000000000000000000000002001'
 
 // The queries use the unified core API (`client.core.getObject` /
@@ -241,7 +241,7 @@ describe('fetchKeyspaceDetail', () => {
           makeKeyspaceFields({
             version: 1,
             acl: {
-              contents: [{ key: 'Grant', value: [{ Ou: { dao_id: DAO_ID } }] }],
+              contents: [{ key: 'Grant', value: [{ Ou: { dao_id: OU_ID } }] }],
             },
           }),
         ),
@@ -249,7 +249,7 @@ describe('fetchKeyspaceDetail', () => {
       multiGetObjects: (jest.fn() as any).mockResolvedValue({ objects: [] }),
     })
     const result = await fetchKeyspaceDetail(client, ACL_ID)
-    expect(result!.grantPrincipals).toEqual([{ type: 'ou', daoId: DAO_ID }])
+    expect(result!.grantPrincipals).toEqual([{ type: 'ou', ouId: OU_ID }])
   })
 
   it('parses gRPC @variant Player and Ou principals', async () => {
@@ -266,7 +266,7 @@ describe('fetchKeyspaceDetail', () => {
                 },
                 {
                   key: 'Grant',
-                  value: [{ '@variant': 'Ou', dao_id: DAO_ID }],
+                  value: [{ '@variant': 'Ou', dao_id: OU_ID }],
                 },
               ],
             },
@@ -279,7 +279,7 @@ describe('fetchKeyspaceDetail', () => {
     expect(result!.readPrincipals).toEqual([
       { type: 'player', address: MEMBER1 },
     ])
-    expect(result!.grantPrincipals).toEqual([{ type: 'ou', daoId: DAO_ID }])
+    expect(result!.grantPrincipals).toEqual([{ type: 'ou', ouId: OU_ID }])
   })
 
   it('parses raw JSON-RPC { variant, fields } Player and Ou principals', async () => {
@@ -296,7 +296,7 @@ describe('fetchKeyspaceDetail', () => {
                 },
                 {
                   key: 'Grant',
-                  value: [{ variant: 'Ou', fields: { dao_id: DAO_ID } }],
+                  value: [{ variant: 'Ou', fields: { dao_id: OU_ID } }],
                 },
               ],
             },
@@ -309,7 +309,7 @@ describe('fetchKeyspaceDetail', () => {
     expect(result!.readPrincipals).toEqual([
       { type: 'player', address: MEMBER1 },
     ])
-    expect(result!.grantPrincipals).toEqual([{ type: 'ou', daoId: DAO_ID }])
+    expect(result!.grantPrincipals).toEqual([{ type: 'ou', ouId: OU_ID }])
   })
 
   it('drops @variant / variant principals that are missing their address fields', async () => {
@@ -363,7 +363,7 @@ describe('fetchKeyspaceDetail', () => {
                 {
                   fields: {
                     key: { Grant: {} },
-                    value: [{ Ou: { dao_id: DAO_ID } }],
+                    value: [{ Ou: { dao_id: OU_ID } }],
                   },
                 },
               ],
@@ -380,7 +380,7 @@ describe('fetchKeyspaceDetail', () => {
     expect(result!.writePrincipals).toEqual([
       { type: 'player', address: MEMBER2 },
     ])
-    expect(result!.grantPrincipals).toEqual([{ type: 'ou', daoId: DAO_ID }])
+    expect(result!.grantPrincipals).toEqual([{ type: 'ou', ouId: OU_ID }])
   })
 
   it('unwraps acl from the JSON-RPC { fields: { contents } } shape', async () => {
