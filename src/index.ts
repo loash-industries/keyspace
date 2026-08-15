@@ -5,6 +5,9 @@ export {
 } from './AclClient'
 export type { PublicAclClient, ReadOnlyAclClientConfig } from './AclClient'
 export { AclError, AclClientError } from './errors'
+// KeyspaceRole is a runtime const *and* a type — export the value so callers
+// can reference `KeyspaceRole.Read`; the type is re-exported alongside it.
+export { KeyspaceRole } from './types'
 export {
   PinataStorageAdapter,
   ObjectStoreStorageAdapter,
@@ -24,7 +27,6 @@ export type {
   Principal,
   /** @deprecated Use Principal */
   Role,
-  KeyspaceRole,
   AclMeta,
   AclDetail,
   EntryMeta,
