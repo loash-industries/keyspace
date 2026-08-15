@@ -67,6 +67,39 @@ const aclClient = new AclClient({
 });
 ```
 
+### Client-side (browser) apps: use `createPublicAclClient`, not `AclClient`
+
+`apiKey` above is a secret — it authenticates requests to the Trinary
+Exchange indexer and must never ship to a browser. If you're wiring up
+`AclClient` in a dapp-kit / frontend context (wallet-connected reads,
+grants, writes), construct it with `createPublicAclClient` instead of
+`new AclClient(...)`:
+
+```ts
+import { createPublicAclClient } from '@trinaryex/keyspace';
+
+const aclClient = createPublicAclClient({
+  suiClient,
+  sealClient,
+  packageId: ACL_PACKAGE_ID,
+  executor: (tx) =>
+    signAndExecuteTransaction({ transaction: tx, options: { showObjectChanges: true } }),
+  storageAdapter: new PinataStorageAdapter({ jwt: PINATA_JWT, gateway: PINATA_GATEWAY }),
+  // no apiKey — there is no client-side key to supply
+});
+```
+
+Same config as `new AclClient(...)` minus `apiKey`. The returned
+`PublicAclClient` type has every method except `getAccessibleAcls` — `getAcl`,
+`createAcl`, `grant`, `revoke`, `rotateAllStaleEntries`, `writeData`/`readData`,
+etc. all work exactly as on a full `AclClient`. Only `getAccessibleAcls` reads
+`apiKey`, so it's the one method a browser context can't (and shouldn't) call.
+
+Need a user's accessible ACLs in a browser app? Fetch that list from your own
+backend: hold a full `AclClient` (constructed with the real `apiKey`)
+server-side, call `getAccessibleAcls()` there, and return the result to the
+client — the same pattern as any other server-only credential.
+
 `signAndExecuteTransaction` comes from dapp-kit's `useSignAndExecuteTransaction()`. In a Node.js script you can use a keypair instead:
 
 ```ts
@@ -201,7 +234,9 @@ const caps = await aclClient.getOwnedAcls(myAddress);
 // AdminCap[] — ACLs this wallet can manage
 
 // Queries the indexer (defaults to https://api.trinary.exchange). Requires the
-// apiKey in config — see https://docs.trinary.exchange/docs/api-keys:
+// apiKey in config — see https://docs.trinary.exchange/docs/api-keys. Server-side
+// only: a client built with createPublicAclClient doesn't expose this method —
+// see "Client-side (browser) apps" above.
 const accessible = await aclClient.getAccessibleAcls(myAddress);
 // string[] — all aclIds where myAddress has any role
 ```
