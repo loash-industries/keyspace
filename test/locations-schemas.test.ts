@@ -309,7 +309,11 @@ describe('migrateDocument', () => {
     })
 
     it('normalizes formatting variants of a valid structure_type', () => {
-      for (const rawType of ['Storage Unit', 'STORAGE_UNIT', '  storage unit  ']) {
+      for (const rawType of [
+        'Storage Unit',
+        'STORAGE_UNIT',
+        '  storage unit  ',
+      ]) {
         const v4Doc = {
           ...baseV4,
           locations: [
