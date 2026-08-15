@@ -1,3 +1,8 @@
+## 7.1.0 (2026-08-15)
+
+* Merge pull request #12 from loash-industries/feat/keyspace-api-key-auth ([7bfea8d](https://github.com/loash-industries/keyspace/commit/7bfea8d)), closes [#12](https://github.com/loash-industries/keyspace/issues/12)
+* feat: add createPublicAclClient for browser/client-side ACL usage ([af87b21](https://github.com/loash-industries/keyspace/commit/af87b21))
+
 ## 7.0.0 (2026-08-15)
 
 * Merge pull request #11 from loash-industries/feat/keyspace-api-key-auth ([1fb7a38](https://github.com/loash-industries/keyspace/commit/1fb7a38)), closes [#11](https://github.com/loash-industries/keyspace/issues/11)
