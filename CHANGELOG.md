@@ -1,3 +1,9 @@
+## <small>8.0.1 (2026-08-15)</small>
+
+* Merge pull request #14 from loash-industries/fix/normalize-structure-type-migration ([c77571f](https://github.com/loash-industries/keyspace/commit/c77571f)), closes [#14](https://github.com/loash-industries/keyspace/issues/14)
+* fix: lint ([020e15b](https://github.com/loash-industries/keyspace/commit/020e15b))
+* fix: normalize structure_type formatting variants during v4→v5 migration ([211a06c](https://github.com/loash-industries/keyspace/commit/211a06c))
+
 ## 8.0.0 (2026-08-15)
 
 * feat: ran prettier ([23273ef](https://github.com/loash-industries/keyspace/commit/23273ef))
