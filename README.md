@@ -56,8 +56,14 @@ const aclClient = new AclClient({
     gateway: 'https://your-gateway.mypinata.cloud',
   }),
 
-  // Optional: enables getAccessibleAcls()
+  // Optional: REST indexer for getAccessibleAcls().
+  // Defaults to the Trinary Exchange API (https://api.trinary.exchange).
   indexerUrl: INDEXER_URL,
+
+  // Required: Trinary Exchange API key, sent as the `x-api-key` header on
+  // indexer requests. See https://docs.trinary.exchange/docs/api-keys to
+  // create one.
+  apiKey: TRINARY_API_KEY,
 });
 ```
 
@@ -194,7 +200,8 @@ const acl = await aclClient.getAcl(aclId);
 const caps = await aclClient.getOwnedAcls(myAddress);
 // AdminCap[] — ACLs this wallet can manage
 
-// Requires indexerUrl in config:
+// Queries the indexer (defaults to https://api.trinary.exchange). Requires the
+// apiKey in config — see https://docs.trinary.exchange/docs/api-keys:
 const accessible = await aclClient.getAccessibleAcls(myAddress);
 // string[] — all aclIds where myAddress has any role
 ```
@@ -246,7 +253,7 @@ try {
 | `ACL_ACCESS_DENIED` | Seal key servers rejected the decryption request |
 | `ACL_ENTRY_NOT_FOUND` | ACL or entry object ID does not exist |
 | `ACL_ALREADY_CURRENT_EPOCH` | `rotateEntry` called on a non-stale entry |
-| `ACL_INDEXER_REQUIRED` | `getAccessibleAcls` called without `indexerUrl` |
+| `ACL_INDEXER_REQUIRED` | `getAccessibleAcls` called with `indexerUrl` explicitly set to empty |
 | `ACL_NOT_IMPLEMENTED` | Tribe roles (require contract upgrade) |
 | `ACL_STORAGE_UPLOAD_FAILED` | Pinata / storage backend rejected the upload |
 | `ACL_STORAGE_FETCH_FAILED` | CID could not be fetched from the gateway |

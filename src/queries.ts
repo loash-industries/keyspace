@@ -277,8 +277,11 @@ async function fetchEncryptedEntries(
 export async function fetchAccessibleKeyspaces(
   indexerUrl: string,
   address: string,
+  apiKey: string,
 ): Promise<string[]> {
-  const res = await fetch(`${indexerUrl}/v1/address/${address}/keyspaces`)
+  const res = await fetch(`${indexerUrl}/v1/address/${address}/keyspaces`, {
+    headers: { 'x-api-key': apiKey },
+  })
   if (!res.ok) {
     throw new AclClientError(
       AclError.UnexpectedResponse,

@@ -30,6 +30,9 @@ import {
 } from './queries'
 import { sealDecrypt, sealEncrypt } from './seal_helpers'
 
+/** Default indexer: the Trinary Exchange gateway. */
+const DEFAULT_INDEXER_URL = 'https://api.trinary.exchange'
+
 export class AclClient {
   private readonly suiClient: AclClientConfig['suiClient']
   private readonly sealClient: AclClientConfig['sealClient']
@@ -37,7 +40,8 @@ export class AclClient {
   private readonly executor: AclClientConfig['executor']
   private readonly storageAdapter: AclClientConfig['storageAdapter']
   private readonly defaultDaoId?: string
-  private readonly indexerUrl?: string
+  private readonly indexerUrl: string
+  private readonly apiKey: string
   private readonly sessionKeyTtlMin: number
 
   constructor(config: AclClientConfig) {
@@ -47,7 +51,8 @@ export class AclClient {
     this.executor = config.executor
     this.storageAdapter = config.storageAdapter
     this.defaultDaoId = config.daoId
-    this.indexerUrl = config.indexerUrl
+    this.indexerUrl = config.indexerUrl ?? DEFAULT_INDEXER_URL
+    this.apiKey = config.apiKey
     this.sessionKeyTtlMin = config.sessionKeyTtlMin ?? 10
   }
 
@@ -150,7 +155,7 @@ export class AclClient {
         'getAccessibleAcls requires an indexerUrl in AclClient config',
       )
     }
-    return fetchAccessibleKeyspaces(this.indexerUrl, address)
+    return fetchAccessibleKeyspaces(this.indexerUrl, address, this.apiKey)
   }
 
   // ── Role management ─────────────────────────────────────────────────────────

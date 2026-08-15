@@ -550,15 +550,16 @@ describe('fetchAccessibleKeyspaces', () => {
     jest.restoreAllMocks()
   })
 
-  it('returns keyspaceIds from the indexer', async () => {
+  it('returns keyspaceIds from the indexer and sends the api key as the x-api-key header', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({ keyspaceIds: ['0xacl1', '0xacl2'] }),
     })
-    const result = await fetchAccessibleKeyspaces(INDEXER, OWNER)
+    const result = await fetchAccessibleKeyspaces(INDEXER, OWNER, 'sk-test-key')
     expect(result).toEqual(['0xacl1', '0xacl2'])
     expect(fetchMock).toHaveBeenCalledWith(
       `${INDEXER}/v1/address/${OWNER}/keyspaces`,
+      { headers: { 'x-api-key': 'sk-test-key' } },
     )
   })
 
@@ -568,11 +569,11 @@ describe('fetchAccessibleKeyspaces', () => {
       status: 503,
       statusText: 'Service Unavailable',
     })
-    await expect(fetchAccessibleKeyspaces(INDEXER, OWNER)).rejects.toThrow(
-      AclClientError,
-    )
     await expect(
-      fetchAccessibleKeyspaces(INDEXER, OWNER),
+      fetchAccessibleKeyspaces(INDEXER, OWNER, 'sk-test-key'),
+    ).rejects.toThrow(AclClientError)
+    await expect(
+      fetchAccessibleKeyspaces(INDEXER, OWNER, 'sk-test-key'),
     ).rejects.toMatchObject({
       code: AclError.UnexpectedResponse,
     })
