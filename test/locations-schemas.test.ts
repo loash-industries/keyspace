@@ -308,6 +308,29 @@ describe('migrateDocument', () => {
       )
     })
 
+    it('normalizes formatting variants of a valid structure_type', () => {
+      for (const rawType of [
+        'Storage Unit',
+        'STORAGE_UNIT',
+        '  storage unit  ',
+      ]) {
+        const v4Doc = {
+          ...baseV4,
+          locations: [
+            {
+              id: 'a',
+              solar_system: 'Sol',
+              structure_type: rawType,
+              warp_in: 'P1L0',
+              description: 'test',
+            },
+          ],
+        }
+        const result = migrateDocument(v4Doc)
+        expect(result.locations[0].structure_type).toBe('storage_unit')
+      }
+    })
+
     it('throws ValidationFailed when the v4 document fails input validation', () => {
       const corruptV4 = {
         ...baseV4,

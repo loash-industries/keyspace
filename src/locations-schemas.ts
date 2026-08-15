@@ -251,11 +251,15 @@ const STRUCTURE_TYPES_V5 = [
   'turret',
 ] as const
 
+// v4 predates the enum — trim/lowercase/space-to-underscore so pre-existing
+// formatting variants (e.g. "Storage Unit") match the canonical slug instead
+// of failing migration outright.
 function normalizeStructureTypeV5(
   rawType: string,
   locationId: string,
 ): (typeof STRUCTURE_TYPES_V5)[number] {
-  const match = STRUCTURE_TYPES_V5.find((t) => t === rawType)
+  const normalized = rawType.trim().toLowerCase().replace(/\s+/g, '_')
+  const match = STRUCTURE_TYPES_V5.find((t) => t === normalized)
   if (!match) {
     throw new AclClientError(
       AclError.ValidationFailed,
