@@ -67,9 +67,9 @@ function parsePrincipal(raw: unknown): Principal | null {
   }
   if ('Ou' in obj) {
     const ou = obj['Ou'] as Record<string, unknown>
-    const daoId = ou?.dao_id as string | undefined
-    if (!daoId) return null
-    return { type: 'ou', daoId }
+    const ouId = ou?.dao_id as string | undefined
+    if (!ouId) return null
+    return { type: 'ou', ouId }
   }
 
   // gRPC core-json format: { "@variant": "Player"|"Ou", ...inlined fields }
@@ -81,9 +81,9 @@ function parsePrincipal(raw: unknown): Principal | null {
     return { type: 'player', address: addr }
   }
   if (atVariant === 'Ou') {
-    const daoId = obj.dao_id as string | undefined
-    if (!daoId) return null
-    return { type: 'ou', daoId }
+    const ouId = obj.dao_id as string | undefined
+    if (!ouId) return null
+    return { type: 'ou', ouId }
   }
 
   // Raw JSON-RPC { variant, fields } format
@@ -95,9 +95,9 @@ function parsePrincipal(raw: unknown): Principal | null {
     return { type: 'player', address: addr }
   }
   if (variant === 'Ou') {
-    const daoId = fields.dao_id as string | undefined
-    if (!daoId) return null
-    return { type: 'ou', daoId }
+    const ouId = fields.dao_id as string | undefined
+    if (!ouId) return null
+    return { type: 'ou', ouId }
   }
 
   return null

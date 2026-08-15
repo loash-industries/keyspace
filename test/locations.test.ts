@@ -16,7 +16,7 @@ const ACL_ID =
   '0x0000000000000000000000000000000000000000000000000000000000001001'
 const ENTRY_ID =
   '0x0000000000000000000000000000000000000000000000000000000000001002'
-const DAO_ID =
+const OU_ID =
   '0x0000000000000000000000000000000000000000000000000000000000001003'
 const WALLET =
   '0x0000000000000000000000000000000000000000000000000000000000001004'
@@ -82,7 +82,7 @@ function makeClient(aclClient = makeAclClient()) {
     entryId: ENTRY_ID,
     walletAddress: WALLET,
     signPersonalMessage: SIGN_FN,
-    daoId: DAO_ID,
+    ouId: OU_ID,
   })
 }
 
@@ -126,7 +126,7 @@ describe('download', () => {
     })
   })
 
-  it('passes daoId through to readData', async () => {
+  it('passes ouId through to readData', async () => {
     const doc = makeDoc()
     const aclClient = makeAclClient({
       readData: (jest.fn() as any).mockResolvedValue(encodeDoc(doc)),
@@ -136,7 +136,7 @@ describe('download', () => {
     await client.download()
 
     expect(aclClient.readData).toHaveBeenCalledWith(
-      expect.objectContaining({ daoId: DAO_ID }),
+      expect.objectContaining({ ouId: OU_ID }),
     )
   })
 })
@@ -449,7 +449,7 @@ describe('LocationsClient.create', () => {
       aclId: ACL_ID,
       walletAddress: WALLET,
       signPersonalMessage: SIGN_FN,
-      daoId: DAO_ID,
+      ouId: OU_ID,
     })
 
     expect(aclClient.writeData).toHaveBeenCalledTimes(1)
@@ -474,7 +474,7 @@ describe('LocationsClient.create', () => {
       aclId: ACL_ID,
       walletAddress: WALLET,
       signPersonalMessage: SIGN_FN,
-      daoId: DAO_ID,
+      ouId: OU_ID,
     })
 
     // Verify the returned client uses the new entryId by calling reencrypt

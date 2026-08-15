@@ -39,7 +39,7 @@ function encodePrincipal(principal: Principal) {
     })
   }
   return PrincipalSchema.serialize({
-    Ou: { dao_id: fromHex(principal.daoId) },
+    Ou: { dao_id: fromHex(principal.ouId) },
   })
 }
 
@@ -57,7 +57,7 @@ function buildPrincipalArg(tx: Transaction, packageId: string, p: Principal) {
   // ID has the same 32-byte BCS encoding as address
   return tx.moveCall({
     target: `${packageId}::acl::ou`,
-    arguments: [tx.pure.address(p.daoId)],
+    arguments: [tx.pure.address(p.ouId)],
   })
 }
 
@@ -76,13 +76,13 @@ export function createKeyspaceTx(packageId: string, name: string): Transaction {
 /**
  * `keyspace::create_keyspace_for_dao(name, dao, grant, read, write)`
  *
- * The `daoId` is passed as an object reference (`tx.object`) so the Move VM
+ * The `ouId` is passed as an object reference (`tx.object`) so the Move VM
  * enforces the `&DAO` witness; the caller's governance membership and the
- * registrant DAO ID are verified on-chain.
+ * registrant OU ID are verified on-chain.
  */
-export function createKeyspaceForDaoTx(
+export function createKeyspaceForOuTx(
   packageId: string,
-  daoId: string,
+  ouId: string,
   name: string,
   grantPrincipals: Principal[],
   readPrincipals: Principal[],
@@ -103,7 +103,7 @@ export function createKeyspaceForDaoTx(
     target: `${packageId}::keyspace::create_keyspace_for_dao`,
     arguments: [
       tx.pure.vector('u8', textBytes(name)),
-      tx.object(daoId),
+      tx.object(ouId),
       buildVec(grantPrincipals),
       buildVec(readPrincipals),
       buildVec(writePrincipals),
@@ -116,7 +116,7 @@ export function createKeyspaceForDaoTx(
 export function grantTx(
   packageId: string,
   keyspaceId: string,
-  daoId: string,
+  ouId: string,
   role: KeyspaceRole,
   principal: Principal,
 ): Transaction {
@@ -127,7 +127,7 @@ export function grantTx(
       tx.object(keyspaceId),
       tx.pure(encodeRole(role)),
       tx.pure(encodePrincipal(principal)),
-      tx.object(daoId),
+      tx.object(ouId),
     ],
   })
   return tx
@@ -137,7 +137,7 @@ export function grantTx(
 export function revokeTx(
   packageId: string,
   keyspaceId: string,
-  daoId: string,
+  ouId: string,
   role: KeyspaceRole,
   principal: Principal,
 ): Transaction {
@@ -148,7 +148,7 @@ export function revokeTx(
       tx.object(keyspaceId),
       tx.pure(encodeRole(role)),
       tx.pure(encodePrincipal(principal)),
-      tx.object(daoId),
+      tx.object(ouId),
     ],
   })
   return tx
@@ -158,7 +158,7 @@ export function revokeTx(
 export function publishEntryTx(
   packageId: string,
   keyspaceId: string,
-  daoId: string,
+  ouId: string,
   uri: string,
   description: string,
 ): Transaction {
@@ -169,7 +169,7 @@ export function publishEntryTx(
       tx.object(keyspaceId),
       tx.pure.vector('u8', textBytes(uri)),
       tx.pure.vector('u8', textBytes(description)),
-      tx.object(daoId),
+      tx.object(ouId),
     ],
   })
   return tx
@@ -180,7 +180,7 @@ export function updateEntryTx(
   packageId: string,
   keyspaceId: string,
   entryId: string,
-  daoId: string,
+  ouId: string,
   newUri: string,
 ): Transaction {
   const tx = new Transaction()
@@ -190,7 +190,7 @@ export function updateEntryTx(
       tx.object(keyspaceId),
       tx.object(entryId),
       tx.pure.vector('u8', textBytes(newUri)),
-      tx.object(daoId),
+      tx.object(ouId),
     ],
   })
   return tx
@@ -201,7 +201,7 @@ export function editEntryTx(
   packageId: string,
   keyspaceId: string,
   entryId: string,
-  daoId: string,
+  ouId: string,
   newUri: string,
 ): Transaction {
   const tx = new Transaction()
@@ -211,7 +211,7 @@ export function editEntryTx(
       tx.object(keyspaceId),
       tx.object(entryId),
       tx.pure.vector('u8', textBytes(newUri)),
-      tx.object(daoId),
+      tx.object(ouId),
     ],
   })
   return tx
@@ -222,7 +222,7 @@ export function editDescriptionTx(
   packageId: string,
   keyspaceId: string,
   entryId: string,
-  daoId: string,
+  ouId: string,
   newDescription: string,
 ): Transaction {
   const tx = new Transaction()
@@ -232,7 +232,7 @@ export function editDescriptionTx(
       tx.object(keyspaceId),
       tx.object(entryId),
       tx.pure.vector('u8', textBytes(newDescription)),
-      tx.object(daoId),
+      tx.object(ouId),
     ],
   })
   return tx

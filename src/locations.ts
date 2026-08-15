@@ -31,8 +31,8 @@ export interface LocationsClientConfig {
   entryId: string
   walletAddress: string
   signPersonalMessage: SignPersonalMessageFn
-  /** DAO object ID — required by keyspace::seal_approve and write operations. */
-  daoId: string
+  /** OU object ID — required by keyspace::seal_approve and write operations. */
+  ouId: string
 }
 
 export class LocationsClient {
@@ -41,7 +41,7 @@ export class LocationsClient {
   private readonly entryId: string
   private readonly walletAddress: string
   private readonly signPersonalMessage: SignPersonalMessageFn
-  private readonly daoId: string
+  private readonly ouId: string
 
   constructor(config: LocationsClientConfig) {
     this.acl = config.aclClient
@@ -49,7 +49,7 @@ export class LocationsClient {
     this.entryId = config.entryId
     this.walletAddress = config.walletAddress
     this.signPersonalMessage = config.signPersonalMessage
-    this.daoId = config.daoId
+    this.ouId = config.ouId
   }
 
   /** Download, decrypt, and migrate the locations document to the current version. */
@@ -59,7 +59,7 @@ export class LocationsClient {
       entryId: this.entryId,
       walletAddress: this.walletAddress,
       signPersonalMessage: this.signPersonalMessage,
-      daoId: this.daoId,
+      ouId: this.ouId,
     })
 
     const text = new TextDecoder().decode(raw)
@@ -88,7 +88,7 @@ export class LocationsClient {
       newPlaintext: JSON.stringify(doc, null, 2),
       walletAddress: this.walletAddress,
       signPersonalMessage: this.signPersonalMessage,
-      daoId: this.daoId,
+      ouId: this.ouId,
     })
   }
 
@@ -118,7 +118,7 @@ export class LocationsClient {
       newPlaintext: JSON.stringify(doc, null, 2),
       walletAddress: this.walletAddress,
       signPersonalMessage: this.signPersonalMessage,
-      daoId: this.daoId,
+      ouId: this.ouId,
     })
   }
 
@@ -143,7 +143,7 @@ export class LocationsClient {
       newPlaintext: JSON.stringify(doc, null, 2),
       walletAddress: this.walletAddress,
       signPersonalMessage: this.signPersonalMessage,
-      daoId: this.daoId,
+      ouId: this.ouId,
     })
   }
 
@@ -157,7 +157,7 @@ export class LocationsClient {
       entryId: this.entryId,
       walletAddress: this.walletAddress,
       signPersonalMessage: this.signPersonalMessage,
-      daoId: this.daoId,
+      ouId: this.ouId,
     })
   }
 
@@ -169,7 +169,7 @@ export class LocationsClient {
     aclId: string
     walletAddress: string
     signPersonalMessage: SignPersonalMessageFn
-    daoId: string
+    ouId: string
   }): Promise<LocationsClient> {
     const doc: LocationsDocument = {
       schema: LOCATIONS_SCHEMA_NAME,
@@ -184,7 +184,7 @@ export class LocationsClient {
       description: 'locations',
       walletAddress: opts.walletAddress,
       signPersonalMessage: opts.signPersonalMessage,
-      daoId: opts.daoId,
+      ouId: opts.ouId,
     })
 
     return new LocationsClient({
@@ -193,7 +193,7 @@ export class LocationsClient {
       entryId: result.entryId,
       walletAddress: opts.walletAddress,
       signPersonalMessage: opts.signPersonalMessage,
-      daoId: opts.daoId,
+      ouId: opts.ouId,
     })
   }
 }

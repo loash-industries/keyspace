@@ -121,8 +121,8 @@ export async function sealEncrypt(
 export interface DecryptOptions {
   packageId: string
   keyspaceId: string
-  /** DAO object ID — required by keyspace::seal_approve. */
-  daoId: string
+  /** OU object ID — required by keyspace::seal_approve. */
+  ouId: string
   encryptedData: Uint8Array
   walletAddress: string
   signPersonalMessage: SignPersonalMessageFn
@@ -137,7 +137,7 @@ export async function sealDecrypt(opts: DecryptOptions): Promise<Uint8Array> {
   const {
     packageId,
     keyspaceId,
-    daoId,
+    ouId,
     encryptedData,
     walletAddress,
     signPersonalMessage,
@@ -164,7 +164,7 @@ export async function sealDecrypt(opts: DecryptOptions): Promise<Uint8Array> {
     arguments: [
       tx.pure.vector('u8', fromHex(parsed.id)),
       tx.object(keyspaceId),
-      tx.object(daoId),
+      tx.object(ouId),
     ],
   })
   const txBytes = await tx.build({
