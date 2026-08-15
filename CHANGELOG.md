@@ -1,3 +1,18 @@
+## 8.0.0 (2026-08-15)
+
+* feat: ran prettier ([23273ef](https://github.com/loash-industries/keyspace/commit/23273ef))
+* feat!: model locations v5 structure_type/transponder_setting as discriminated unions ([d91e0d1](https://github.com/loash-industries/keyspace/commit/d91e0d1))
+* feat!: rename DAO to OU (Organizational Unit) across the public API ([4aca418](https://github.com/loash-industries/keyspace/commit/4aca418))
+* Merge pull request #13 from loash-industries/chore/rename-dao-to-ou ([05a9d97](https://github.com/loash-industries/keyspace/commit/05a9d97)), closes [#13](https://github.com/loash-industries/keyspace/issues/13)
+
+### BREAKING CHANGE
+
+* daoId config/option fields and AclError.DaoIdRequired are
+renamed to ouId / OuIdRequired.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+* model locations v5 structure_type/transponder_setting as discriminated unions
+
 ## 7.1.0 (2026-08-15)
 
 * Merge pull request #12 from loash-industries/feat/keyspace-api-key-auth ([7bfea8d](https://github.com/loash-industries/keyspace/commit/7bfea8d)), closes [#12](https://github.com/loash-industries/keyspace/issues/12)
