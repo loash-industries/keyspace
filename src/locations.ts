@@ -6,9 +6,12 @@ import {
   LOCATIONS_SCHEMA_VERSION,
   WARP_IN_MAX_LENGTH,
   TRANSPONDER_CODE_MAX_LENGTH,
+  DESTINATION_UNKNOWN,
   type TransponderSetting,
+  type StructureType,
   type Location,
   type LocationsDocument,
+  type LocationUpdate,
   migrateDocument,
   validateLocation,
 } from './locations-schemas'
@@ -18,9 +21,12 @@ export {
   LOCATIONS_SCHEMA_VERSION,
   WARP_IN_MAX_LENGTH,
   TRANSPONDER_CODE_MAX_LENGTH,
+  DESTINATION_UNKNOWN,
   type TransponderSetting,
+  type StructureType,
   type Location,
   type LocationsDocument,
+  type LocationUpdate,
 }
 
 // ── LocationsClient ───────────────────────────────────────────────────────────
@@ -68,18 +74,18 @@ export class LocationsClient {
 
   /** Add a new location to the document, re-encrypt, and upload. */
   async addLocation(location: Location): Promise<WriteResult> {
-    validateLocation(location)
+    const validated = validateLocation(location)
     const doc = await this.download()
 
-    const exists = doc.locations.some((l) => l.id === location.id)
+    const exists = doc.locations.some((l) => l.id === validated.id)
     if (exists) {
       throw new AclClientError(
         AclError.UnexpectedResponse,
-        `Location with id "${location.id}" already exists`,
+        `Location with id "${validated.id}" already exists`,
       )
     }
 
-    doc.locations.push(location)
+    doc.locations.push(validated)
     doc.updated_at = new Date().toISOString()
 
     return this.acl.editData({
@@ -93,10 +99,7 @@ export class LocationsClient {
   }
 
   /** Update an existing location by id, re-encrypt, and upload. */
-  async updateLocation(
-    id: string,
-    updates: Partial<Omit<Location, 'id'>>,
-  ): Promise<WriteResult> {
+  async updateLocation(id: string, updates: LocationUpdate): Promise<WriteResult> {
     const doc = await this.download()
 
     const idx = doc.locations.findIndex((l) => l.id === id)
@@ -107,9 +110,12 @@ export class LocationsClient {
       )
     }
 
+    // Merging two differently-discriminated unions can't type-check as a
+    // single Location — validateLocation() is the actual source of truth,
+    // catching e.g. a structure_type switch to 'catapult' that didn't also
+    // supply destination_solar_system.
     const merged = { ...doc.locations[idx], ...updates }
-    validateLocation(merged)
-    doc.locations[idx] = merged
+    doc.locations[idx] = validateLocation(merged)
     doc.updated_at = new Date().toISOString()
 
     return this.acl.editData({

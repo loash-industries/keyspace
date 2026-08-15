@@ -1,5 +1,5 @@
-export { AclClient, createPublicAclClient } from './AclClient'
-export type { PublicAclClient } from './AclClient'
+export { AclClient, createPublicAclClient, ReadOnlyAclClient } from './AclClient'
+export type { PublicAclClient, ReadOnlyAclClientConfig } from './AclClient'
 export { AclError, AclClientError } from './errors'
 export {
   PinataStorageAdapter,
@@ -14,6 +14,7 @@ export {
   LOCATIONS_SCHEMA_VERSION,
   WARP_IN_MAX_LENGTH,
   TRANSPONDER_CODE_MAX_LENGTH,
+  DESTINATION_UNKNOWN,
 } from './locations'
 export type {
   Principal,
@@ -42,7 +43,9 @@ export type {
 } from './storage'
 export type {
   TransponderSetting,
+  StructureType,
   Location,
   LocationsDocument,
+  LocationUpdate,
   LocationsClientConfig,
 } from './locations'
