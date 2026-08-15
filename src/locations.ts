@@ -99,7 +99,10 @@ export class LocationsClient {
   }
 
   /** Update an existing location by id, re-encrypt, and upload. */
-  async updateLocation(id: string, updates: LocationUpdate): Promise<WriteResult> {
+  async updateLocation(
+    id: string,
+    updates: LocationUpdate,
+  ): Promise<WriteResult> {
     const doc = await this.download()
 
     const idx = doc.locations.findIndex((l) => l.id === id)

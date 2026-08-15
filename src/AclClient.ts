@@ -608,7 +608,10 @@ export class ReadOnlyAclClient {
     return detail.entries.filter((e) => e.isStale)
   }
 
-  async isEntryStale(opts: { aclId: string; entryId: string }): Promise<boolean> {
+  async isEntryStale(opts: {
+    aclId: string
+    entryId: string
+  }): Promise<boolean> {
     const meta = await this.getAclMeta(opts.aclId)
     const entry = await fetchEncryptedEntry(
       this.suiClient,

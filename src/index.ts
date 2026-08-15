@@ -1,4 +1,8 @@
-export { AclClient, createPublicAclClient, ReadOnlyAclClient } from './AclClient'
+export {
+  AclClient,
+  createPublicAclClient,
+  ReadOnlyAclClient,
+} from './AclClient'
 export type { PublicAclClient, ReadOnlyAclClientConfig } from './AclClient'
 export { AclError, AclClientError } from './errors'
 export {

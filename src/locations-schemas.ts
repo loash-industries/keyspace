@@ -145,7 +145,10 @@ const LocationBaseFieldsV5 = {
   solar_system: z.string(),
   warp_in: z
     .string()
-    .max(WARP_IN_MAX_LENGTH, `warp_in must be ≤ ${WARP_IN_MAX_LENGTH} characters`),
+    .max(
+      WARP_IN_MAX_LENGTH,
+      `warp_in must be ≤ ${WARP_IN_MAX_LENGTH} characters`,
+    ),
   description: z.string(),
 }
 
@@ -241,7 +244,12 @@ interface MigrationStep {
   migrate: (doc: unknown) => unknown
 }
 
-const STRUCTURE_TYPES_V5 = ['gate', 'catapult', 'storage_unit', 'turret'] as const
+const STRUCTURE_TYPES_V5 = [
+  'gate',
+  'catapult',
+  'storage_unit',
+  'turret',
+] as const
 
 function normalizeStructureTypeV5(
   rawType: string,
