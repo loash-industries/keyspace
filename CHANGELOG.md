@@ -1,3 +1,8 @@
+## 8.1.0 (2026-08-15)
+
+* Merge pull request #15 from loash-industries/feat/keyspace-role-runtime-const ([acce796](https://github.com/loash-industries/keyspace/commit/acce796)), closes [#15](https://github.com/loash-industries/keyspace/issues/15)
+* feat: expose KeyspaceRole as a runtime const ([3846ed0](https://github.com/loash-industries/keyspace/commit/3846ed0))
+
 ## <small>8.0.1 (2026-08-15)</small>
 
 * Merge pull request #14 from loash-industries/fix/normalize-structure-type-migration ([c77571f](https://github.com/loash-industries/keyspace/commit/c77571f)), closes [#14](https://github.com/loash-industries/keyspace/issues/14)
