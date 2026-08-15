@@ -114,6 +114,7 @@ function makeConfig(overrides: Partial<AclClientConfig> = {}): AclClientConfig {
     executor: makeExecutor(),
     storageAdapter: makeStorageAdapter(),
     daoId: DAO_ID,
+    apiKey: 'sk-test-key',
     ...overrides,
   }
 }
@@ -158,21 +159,39 @@ describe('getAcl', () => {
 // ── getAccessibleAcls ─────────────────────────────────────────────────────────
 
 describe('getAccessibleAcls', () => {
-  it('throws AclClientError(IndexerRequired) when indexerUrl is not configured', async () => {
+  it('defaults to the Trinary Exchange gateway when indexerUrl is not configured', async () => {
+    mockFetchAccessibleKeyspaces.mockResolvedValue(['0xacl1'])
     const client = makeClient({ indexerUrl: undefined })
+
+    const result = await client.getAccessibleAcls(OWNER)
+
+    expect(result).toEqual(['0xacl1'])
+    expect(mockFetchAccessibleKeyspaces).toHaveBeenCalledWith(
+      'https://api.trinary.exchange',
+      OWNER,
+      'sk-test-key',
+    )
+  })
+
+  it('throws AclClientError(IndexerRequired) when indexerUrl is explicitly empty', async () => {
+    const client = makeClient({ indexerUrl: '' })
     await expect(client.getAccessibleAcls(OWNER)).rejects.toMatchObject({
       code: AclError.IndexerRequired,
     })
   })
 
-  it('delegates to fetchAccessibleKeyspaces when indexerUrl is configured', async () => {
+  it('delegates to fetchAccessibleKeyspaces with the configured indexerUrl and apiKey', async () => {
     mockFetchAccessibleKeyspaces.mockResolvedValue(['0xacl1', '0xacl2'])
-    const client = makeClient({ indexerUrl: INDEXER })
+    const client = makeClient({ indexerUrl: INDEXER, apiKey: 'sk-test-key' })
 
     const result = await client.getAccessibleAcls(OWNER)
 
     expect(result).toEqual(['0xacl1', '0xacl2'])
-    expect(mockFetchAccessibleKeyspaces).toHaveBeenCalledWith(INDEXER, OWNER)
+    expect(mockFetchAccessibleKeyspaces).toHaveBeenCalledWith(
+      INDEXER,
+      OWNER,
+      'sk-test-key',
+    )
   })
 })
 

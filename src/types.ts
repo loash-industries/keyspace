@@ -131,8 +131,18 @@ export interface AclClientConfig {
    * Can be overridden per-method. Required for grant/revoke/write/read ops.
    */
   daoId?: string
-  /** REST indexer URL for getAccessibleAcls — optional */
+  /**
+   * REST indexer URL for getAccessibleAcls.
+   * Defaults to the Trinary Exchange gateway (`https://api.trinary.exchange`).
+   */
   indexerUrl?: string
+  /**
+   * Trinary Exchange API key used to authenticate indexer requests. Sent as
+   * the `x-api-key` header.
+   *
+   * See https://docs.trinary.exchange/docs/api-keys for how to create one.
+   */
+  apiKey: string
   /** Seal session key TTL in minutes (default: 10) */
   sessionKeyTtlMin?: number
 }
