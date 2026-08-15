@@ -493,3 +493,34 @@ export class AclClient {
     return meta
   }
 }
+
+// ── Client-side (browser) usage ────────────────────────────────────────────
+
+/**
+ * `AclClient` minus `getAccessibleAcls` — the one method that reads
+ * `config.apiKey`. That key authenticates requests to the Trinary Exchange
+ * indexer and is a server-only secret; it must never ship to a browser.
+ * Every other method (`getAcl`, `createAcl`, `grant`, `revoke`,
+ * `rotateAllStaleEntries`, `writeData`/`readData`, ...) needs no `apiKey` and
+ * is safe to call from client-side code.
+ */
+export type PublicAclClient = Omit<AclClient, 'getAccessibleAcls'>
+
+/**
+ * Build an `AclClient` for browser / client-side code. Takes the same config
+ * as `new AclClient(...)` minus `apiKey` — there is no client-side key to
+ * supply. The return type is `PublicAclClient`, so `getAccessibleAcls` isn't
+ * callable through it: nothing tempts a caller into wiring a real indexer
+ * key into browser-shipped code, or into calling the method with a key that
+ * doesn't exist.
+ *
+ * Need accessible-ACLs data in a browser app? Fetch it from your own
+ * backend: hold a full `AclClient` (constructed with the real `apiKey`)
+ * server-side, call `getAccessibleAcls()` there, and return the result to
+ * the client.
+ */
+export function createPublicAclClient(
+  config: Omit<AclClientConfig, 'apiKey'>,
+): PublicAclClient {
+  return new AclClient({ ...config, apiKey: '' })
+}

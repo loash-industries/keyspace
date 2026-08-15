@@ -141,6 +141,12 @@ export interface AclClientConfig {
    * the `x-api-key` header.
    *
    * See https://docs.trinary.exchange/docs/api-keys for how to create one.
+   *
+   * This is a secret — construct `AclClient` directly with it only in
+   * server-side code. In a browser / client-side app, use
+   * `createPublicAclClient` instead: it takes this same config minus
+   * `apiKey` and returns a client typed without `getAccessibleAcls` (the
+   * only method that reads it).
    */
   apiKey: string
   /** Seal session key TTL in minutes (default: 10) */

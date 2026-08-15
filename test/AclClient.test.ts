@@ -34,7 +34,7 @@ jest.unstable_mockModule('../src/seal_helpers', () => ({
 
 // ── Dynamic imports after mock registration ────────────────────────────────────
 
-const { AclClient } = await import('../src/AclClient')
+const { AclClient, createPublicAclClient } = await import('../src/AclClient')
 
 // ── Valid Sui addresses (32 bytes = 64 hex chars) ─────────────────────────────
 
@@ -191,6 +191,59 @@ describe('getAccessibleAcls', () => {
       INDEXER,
       OWNER,
       'sk-test-key',
+    )
+  })
+})
+
+// ── createPublicAclClient ────────────────────────────────────────────────────
+
+describe('createPublicAclClient', () => {
+  function makePublicConfig(
+    overrides: Partial<Omit<AclClientConfig, 'apiKey'>> = {},
+  ): Omit<AclClientConfig, 'apiKey'> {
+    const full = makeConfig()
+    return {
+      suiClient: full.suiClient,
+      sealClient: full.sealClient,
+      packageId: full.packageId,
+      executor: full.executor,
+      storageAdapter: full.storageAdapter,
+      daoId: full.daoId,
+      indexerUrl: full.indexerUrl,
+      sessionKeyTtlMin: full.sessionKeyTtlMin,
+      ...overrides,
+    }
+  }
+
+  it('delegates non-indexer methods (e.g. getAcl) normally', async () => {
+    const detail = makeAclDetail()
+    mockFetchKeyspaceDetail.mockResolvedValue(detail)
+
+    const client = createPublicAclClient(makePublicConfig())
+    const result = await client.getAcl(ACL_ID)
+
+    expect(result).toBe(detail)
+  })
+
+  it("doesn't expose getAccessibleAcls on its type", () => {
+    const client = createPublicAclClient(makePublicConfig())
+
+    // @ts-expect-error getAccessibleAcls is omitted from PublicAclClient.
+    expect(client.getAccessibleAcls).toBeDefined()
+  })
+
+  it('runs with an empty apiKey at runtime if the hidden method is force-called', async () => {
+    mockFetchAccessibleKeyspaces.mockResolvedValue(['0xacl1'])
+    const client = createPublicAclClient(
+      makePublicConfig({ indexerUrl: INDEXER }),
+    )
+
+    await (client as InstanceType<typeof AclClient>).getAccessibleAcls(OWNER)
+
+    expect(mockFetchAccessibleKeyspaces).toHaveBeenCalledWith(
+      INDEXER,
+      OWNER,
+      '',
     )
   })
 })

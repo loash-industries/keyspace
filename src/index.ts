@@ -1,4 +1,5 @@
-export { AclClient } from './AclClient'
+export { AclClient, createPublicAclClient } from './AclClient'
+export type { PublicAclClient } from './AclClient'
 export { AclError, AclClientError } from './errors'
 export {
   PinataStorageAdapter,
