@@ -265,6 +265,202 @@ describe('removeLocation', () => {
   })
 })
 
+// ── applyEdits ────────────────────────────────────────────────────────────────
+
+describe('applyEdits', () => {
+  it('applies remove, update, and add in a single editData call', async () => {
+    const doc = makeDoc([
+      makeLocation({ id: 'keep' }),
+      makeLocation({ id: 'drop' }),
+      makeLocation({ id: 'edit', description: 'old' }),
+    ])
+    const aclClient = makeAclClient({
+      readData: (jest.fn() as any).mockResolvedValue(encodeDoc(doc)),
+    })
+    const client = makeClient(aclClient)
+
+    await client.applyEdits({
+      remove: ['drop'],
+      update: [{ id: 'edit', changes: { description: 'new' } }],
+      add: [makeLocation({ id: 'fresh' })],
+    })
+
+    // The whole batch is one download and one write — that is the point.
+    expect(aclClient.readData).toHaveBeenCalledTimes(1)
+    expect(aclClient.editData).toHaveBeenCalledTimes(1)
+
+    const saved: LocationsDocument = JSON.parse(
+      aclClient.editData.mock.calls[0][0].newPlaintext,
+    )
+    const ids = saved.locations.map((l) => l.id)
+    expect(ids).toEqual(['keep', 'edit', 'fresh'])
+    expect(saved.locations.find((l) => l.id === 'edit')?.description).toBe(
+      'new',
+    )
+  })
+
+  it('allows removing and re-adding the same id in one batch', async () => {
+    const doc = makeDoc([makeLocation({ id: 'x', description: 'before' })])
+    const aclClient = makeAclClient({
+      readData: (jest.fn() as any).mockResolvedValue(encodeDoc(doc)),
+    })
+    const client = makeClient(aclClient)
+
+    await client.applyEdits({
+      remove: ['x'],
+      add: [makeLocation({ id: 'x', description: 'after' })],
+    })
+
+    const saved: LocationsDocument = JSON.parse(
+      aclClient.editData.mock.calls[0][0].newPlaintext,
+    )
+    expect(saved.locations).toHaveLength(1)
+    expect(saved.locations[0].description).toBe('after')
+  })
+
+  it('throws ValidationFailed and does not read or write when no edits are given', async () => {
+    const aclClient = makeAclClient()
+    const client = makeClient(aclClient)
+
+    await expect(client.applyEdits({})).rejects.toMatchObject({
+      code: AclError.ValidationFailed,
+    })
+    expect(aclClient.readData).not.toHaveBeenCalled()
+    expect(aclClient.editData).not.toHaveBeenCalled()
+  })
+
+  it('throws EntryNotFound when a remove id is missing', async () => {
+    const doc = makeDoc([makeLocation({ id: 'exists' })])
+    const aclClient = makeAclClient({
+      readData: (jest.fn() as any).mockResolvedValue(encodeDoc(doc)),
+    })
+    const client = makeClient(aclClient)
+
+    await expect(
+      client.applyEdits({ remove: ['missing'] }),
+    ).rejects.toMatchObject({ code: AclError.EntryNotFound })
+    expect(aclClient.editData).not.toHaveBeenCalled()
+  })
+
+  it('throws EntryNotFound when an update id is missing', async () => {
+    const doc = makeDoc([makeLocation({ id: 'exists' })])
+    const aclClient = makeAclClient({
+      readData: (jest.fn() as any).mockResolvedValue(encodeDoc(doc)),
+    })
+    const client = makeClient(aclClient)
+
+    await expect(
+      client.applyEdits({
+        update: [{ id: 'missing', changes: { description: 'x' } }],
+      }),
+    ).rejects.toMatchObject({ code: AclError.EntryNotFound })
+  })
+
+  it('throws ValidationFailed when an added id already exists', async () => {
+    const doc = makeDoc([makeLocation({ id: 'dup' })])
+    const aclClient = makeAclClient({
+      readData: (jest.fn() as any).mockResolvedValue(encodeDoc(doc)),
+    })
+    const client = makeClient(aclClient)
+
+    await expect(
+      client.applyEdits({ add: [makeLocation({ id: 'dup' })] }),
+    ).rejects.toMatchObject({ code: AclError.ValidationFailed })
+  })
+
+  it('rejects a malformed add before downloading (fail fast)', async () => {
+    const aclClient = makeAclClient({
+      readData: (jest.fn() as any).mockResolvedValue(
+        encodeDoc(makeDoc([makeLocation({ id: 'a' })])),
+      ),
+    })
+    const client = makeClient(aclClient)
+
+    await expect(
+      // catapult without destination_solar_system — invalid shape.
+      client.applyEdits({
+        add: [makeLocation({ id: 'b', structure_type: 'catapult' })],
+      }),
+    ).rejects.toMatchObject({ code: AclError.ValidationFailed })
+    // The bad add is caught before any decrypt round-trip.
+    expect(aclClient.readData).not.toHaveBeenCalled()
+    expect(aclClient.editData).not.toHaveBeenCalled()
+  })
+
+  it('rejects duplicate ids within a bucket before downloading', async () => {
+    const aclClient = makeAclClient()
+    const client = makeClient(aclClient)
+
+    await expect(
+      client.applyEdits({ remove: ['x', 'x'] }),
+    ).rejects.toMatchObject({ code: AclError.ValidationFailed })
+    expect(aclClient.readData).not.toHaveBeenCalled()
+  })
+
+  it('rejects an id that is both removed and updated before downloading', async () => {
+    const aclClient = makeAclClient()
+    const client = makeClient(aclClient)
+
+    await expect(
+      client.applyEdits({
+        remove: ['x'],
+        update: [{ id: 'x', changes: { description: 'y' } }],
+      }),
+    ).rejects.toMatchObject({ code: AclError.ValidationFailed })
+    expect(aclClient.readData).not.toHaveBeenCalled()
+  })
+
+  it('rejects an id that is both updated and added before downloading', async () => {
+    const aclClient = makeAclClient()
+    const client = makeClient(aclClient)
+
+    await expect(
+      client.applyEdits({
+        update: [{ id: 'x', changes: { description: 'y' } }],
+        add: [makeLocation({ id: 'x' })],
+      }),
+    ).rejects.toMatchObject({ code: AclError.ValidationFailed })
+    expect(aclClient.readData).not.toHaveBeenCalled()
+  })
+
+  it('rejects the whole batch (no write) when one edit is invalid', async () => {
+    const doc = makeDoc([makeLocation({ id: 'a', structure_type: 'gate' })])
+    const aclClient = makeAclClient({
+      readData: (jest.fn() as any).mockResolvedValue(encodeDoc(doc)),
+    })
+    const client = makeClient(aclClient)
+
+    await expect(
+      client.applyEdits({
+        add: [makeLocation({ id: 'b' })],
+        // Invalid: catapult without destination_solar_system.
+        update: [{ id: 'a', changes: { structure_type: 'catapult' } }],
+      }),
+    ).rejects.toMatchObject({ code: AclError.ValidationFailed })
+    expect(aclClient.editData).not.toHaveBeenCalled()
+  })
+
+  it('passes ouId through to editData and returns its WriteResult', async () => {
+    const doc = makeDoc()
+    const aclClient = makeAclClient({
+      readData: (jest.fn() as any).mockResolvedValue(encodeDoc(doc)),
+      editData: (jest.fn() as any).mockResolvedValue({
+        entryId: ENTRY_ID,
+        uri: 'ipfs://batch',
+        epoch: 7,
+      }),
+    })
+    const client = makeClient(aclClient)
+
+    const result = await client.applyEdits({ add: [makeLocation({ id: 'z' })] })
+
+    expect(aclClient.editData).toHaveBeenCalledWith(
+      expect.objectContaining({ ouId: OU_ID }),
+    )
+    expect(result).toEqual({ entryId: ENTRY_ID, uri: 'ipfs://batch', epoch: 7 })
+  })
+})
+
 // ── reencrypt ─────────────────────────────────────────────────────────────────
 
 describe('reencrypt', () => {

@@ -54,4 +54,5 @@ export type {
   LocationsDocument,
   LocationUpdate,
   LocationsClientConfig,
+  LocationsBatchEdits,
 } from './locations'
