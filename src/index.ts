@@ -13,6 +13,9 @@ export {
   ObjectStoreStorageAdapter,
   S3ObjectStoreClient,
   getDownloadUrl,
+  downloadBlob,
+  unwrapBlob,
+  DEFAULT_IPFS_GATEWAY,
 } from './storage'
 export { clearSessionCache } from './seal_helpers'
 export {

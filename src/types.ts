@@ -159,6 +159,21 @@ export interface AclClientConfig {
    */
   indexerUrl?: string
   /**
+   * IPFS gateway used by the adapter-independent read resolver to fetch
+   * `ipfs://` blobs directly — no write adapter required. Defaults to
+   * `https://gateway.pinata.cloud`. Reads only.
+   */
+  ipfsGateway?: string
+  /**
+   * How reads resolve an entry's `uri`. By default a read fetches the blob
+   * generically (scheme-routed fetch + format sniffing), independent of which
+   * adapter wrote it, and only falls back to `storageAdapter.download` when
+   * that fails — so a reader isn't tied to the write-side adapter. Set `true`
+   * to try `storageAdapter` first and skip the generic probe; useful when every
+   * blob lives in a private backend a plain fetch can't reach.
+   */
+  preferAdapterDownload?: boolean
+  /**
    * Trinary Exchange API key used to authenticate indexer requests. Sent as
    * the `x-api-key` header.
    *

@@ -6,7 +6,7 @@ import type {
   EntryMeta,
   Principal,
 } from '../src/types'
-import { AclError } from '../src/errors'
+import { AclError, AclClientError } from '../src/errors'
 
 // ── Mock functions (defined before unstable_mockModule calls) ─────────────────
 
@@ -16,6 +16,7 @@ const mockFetchEncryptedEntry = jest.fn() as any
 const mockFetchAccessibleKeyspaces = jest.fn() as any
 const mockSealEncrypt = jest.fn() as any
 const mockSealDecrypt = jest.fn() as any
+const mockDownloadBlob = jest.fn() as any
 
 // ── Module mocks (must precede dynamic imports) ────────────────────────────────
 
@@ -30,6 +31,14 @@ jest.unstable_mockModule('../src/seal_helpers', () => ({
   sealEncrypt: mockSealEncrypt,
   sealDecrypt: mockSealDecrypt,
   clearSessionCache: jest.fn(),
+}))
+
+// Mock the adapter-independent resolver so readData tests never touch the
+// network. Its own behavior is covered in storage.test.ts; here we only drive
+// the resolveBlob wiring (generic-first, adapter fallback, ordering).
+jest.unstable_mockModule('../src/storage', () => ({
+  downloadBlob: mockDownloadBlob,
+  DEFAULT_IPFS_GATEWAY: 'https://gateway.pinata.cloud',
 }))
 
 // ── Dynamic imports after mock registration ────────────────────────────────────
@@ -127,6 +136,11 @@ function makeClient(overrides: Partial<AclClientConfig> = {}) {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  // Default: the generic resolver "fails" so tests exercise the adapter path
+  // unless a test opts into a successful generic download.
+  mockDownloadBlob.mockRejectedValue(
+    new AclClientError(AclError.StorageFetchFailed, 'generic download off'),
+  )
 })
 
 // ── getAcl ────────────────────────────────────────────────────────────────────
@@ -639,6 +653,86 @@ describe('readData', () => {
       }),
     )
     expect(result).toBe(PLAINTEXT)
+  })
+
+  it('resolves the blob generically by default, without calling the adapter', async () => {
+    const storageAdapter = makeStorageAdapter()
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 1 }))
+    mockFetchEncryptedEntry.mockResolvedValue(makeEntry())
+    mockSealDecrypt.mockResolvedValue(PLAINTEXT)
+    mockDownloadBlob.mockReset().mockResolvedValue(ENCRYPTED)
+
+    const client = makeClient({ storageAdapter })
+    await client.readData({
+      aclId: ACL_ID,
+      entryId: ENTRY_ID,
+      walletAddress: OWNER,
+      signPersonalMessage,
+    })
+
+    expect(mockDownloadBlob).toHaveBeenCalledWith(`ipfs://${CID}`, {
+      ipfsGateway: 'https://gateway.pinata.cloud',
+    })
+    // Generic path succeeded — the adapter is never touched.
+    expect(storageAdapter.download).not.toHaveBeenCalled()
+    expect(mockSealDecrypt).toHaveBeenCalledWith(
+      expect.objectContaining({ encryptedData: ENCRYPTED }),
+    )
+  })
+
+  it('falls back to the storage adapter when the generic resolver fails', async () => {
+    const storageAdapter = makeStorageAdapter() // download → ENCRYPTED
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 1 }))
+    mockFetchEncryptedEntry.mockResolvedValue(makeEntry())
+    mockSealDecrypt.mockResolvedValue(PLAINTEXT)
+    // mockDownloadBlob rejects by default (see beforeEach)
+
+    const client = makeClient({ storageAdapter })
+    const result = await client.readData({
+      aclId: ACL_ID,
+      entryId: ENTRY_ID,
+      walletAddress: OWNER,
+      signPersonalMessage,
+    })
+
+    expect(mockDownloadBlob).toHaveBeenCalled()
+    expect(storageAdapter.download).toHaveBeenCalledWith(`ipfs://${CID}`)
+    expect(result).toBe(PLAINTEXT)
+  })
+
+  it('with preferAdapterDownload, uses the adapter first and skips the generic probe', async () => {
+    const storageAdapter = makeStorageAdapter()
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 1 }))
+    mockFetchEncryptedEntry.mockResolvedValue(makeEntry())
+    mockSealDecrypt.mockResolvedValue(PLAINTEXT)
+
+    const client = makeClient({ storageAdapter, preferAdapterDownload: true })
+    await client.readData({
+      aclId: ACL_ID,
+      entryId: ENTRY_ID,
+      walletAddress: OWNER,
+      signPersonalMessage,
+    })
+
+    expect(storageAdapter.download).toHaveBeenCalledWith(`ipfs://${CID}`)
+    expect(mockDownloadBlob).not.toHaveBeenCalled()
+  })
+
+  it('surfaces the primary error when both the resolver and the adapter fail', async () => {
+    const storageAdapter = makeStorageAdapter()
+    storageAdapter.download.mockRejectedValue(new Error('adapter 403'))
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 1 }))
+    mockFetchEncryptedEntry.mockResolvedValue(makeEntry())
+
+    const client = makeClient({ storageAdapter })
+    await expect(
+      client.readData({
+        aclId: ACL_ID,
+        entryId: ENTRY_ID,
+        walletAddress: OWNER,
+        signPersonalMessage,
+      }),
+    ).rejects.toMatchObject({ code: AclError.StorageFetchFailed })
   })
 
   it('throws AclClientError(EntryNotFound) when entry does not exist', async () => {

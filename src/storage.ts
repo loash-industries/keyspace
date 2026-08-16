@@ -1,6 +1,12 @@
 import type { StorageAdapter } from './types'
 import { AclClientError, AclError } from './errors'
 
+/**
+ * Default public IPFS gateway used to resolve `ipfs://` URIs on the read path
+ * when no gateway is configured. Mirrors PinataStorageAdapter's default.
+ */
+export const DEFAULT_IPFS_GATEWAY = 'https://gateway.pinata.cloud'
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function uint8ToHex(buf: Uint8Array): string {
@@ -301,4 +307,73 @@ export function getDownloadUrl(uri: string, ipfsGatewayUrl?: string): string {
     return `${ipfsGatewayUrl.replace(/\/$/, '')}/ipfs/${cid}`
   }
   return uri
+}
+
+// ── Adapter-independent blob resolution ───────────────────────────────────────
+
+/**
+ * Unwrap raw fetched bytes into ciphertext, tolerant of either wire format the
+ * bundled adapters produce:
+ *
+ * - PinataStorageAdapter stores a JSON envelope `{ "blob": "<hex>" }` (its
+ *   pinning endpoint is JSON-only).
+ * - ObjectStoreStorageAdapter stores the raw ciphertext bytes, no envelope.
+ *
+ * Sniffing the shape lets a reader decode a blob without knowing which adapter
+ * wrote it. Raw ciphertext is (with overwhelming probability) not valid UTF-8
+ * JSON with a string `blob` field, so the envelope branch only matches genuine
+ * Pinata-style payloads; everything else passes through untouched.
+ */
+export function unwrapBlob(bytes: Uint8Array): Uint8Array {
+  try {
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+    const parsed = JSON.parse(text) as unknown
+    if (
+      parsed !== null &&
+      typeof parsed === 'object' &&
+      typeof (parsed as { blob?: unknown }).blob === 'string'
+    ) {
+      return hexToUint8((parsed as { blob: string }).blob)
+    }
+  } catch {
+    // Not a UTF-8 JSON envelope — treat as raw ciphertext bytes.
+  }
+  return bytes
+}
+
+/**
+ * Fetch an encrypted blob directly from its `uri`, independent of the storage
+ * adapter that wrote it. Resolves the scheme with {@link getDownloadUrl}
+ * (`ipfs://` via the configured gateway, `https://` as-is), fetches, and
+ * {@link unwrapBlob}s the result.
+ *
+ * This works for any publicly fetchable blob (public IPFS gateway, public
+ * bucket, or a read proxy). It cannot reach a private backend that requires
+ * signed requests — for those, fall back to the credentialed StorageAdapter.
+ */
+export async function downloadBlob(
+  uri: string,
+  opts?: { ipfsGateway?: string },
+): Promise<Uint8Array> {
+  const url = getDownloadUrl(uri, opts?.ipfsGateway ?? DEFAULT_IPFS_GATEWAY)
+
+  let res: Response
+  try {
+    res = await fetch(url)
+  } catch (err) {
+    throw new AclClientError(
+      AclError.StorageFetchFailed,
+      `Blob fetch failed for ${uri}: ${(err as Error).message ?? String(err)}`,
+      err,
+    )
+  }
+
+  if (!res.ok) {
+    throw new AclClientError(
+      AclError.StorageFetchFailed,
+      `Blob fetch failed for ${uri} (${res.status}): ${res.statusText}`,
+    )
+  }
+
+  return unwrapBlob(new Uint8Array(await res.arrayBuffer()))
 }

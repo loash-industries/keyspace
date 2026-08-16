@@ -29,6 +29,7 @@ import {
   fetchKeyspaceMeta,
 } from './queries'
 import { sealDecrypt, sealEncrypt } from './seal_helpers'
+import { downloadBlob, DEFAULT_IPFS_GATEWAY } from './storage'
 
 /** Default indexer: the Trinary Exchange gateway. */
 const DEFAULT_INDEXER_URL = 'https://api.trinary.exchange'
@@ -43,6 +44,8 @@ export class AclClient {
   private readonly indexerUrl: string
   private readonly apiKey: string
   private readonly sessionKeyTtlMin: number
+  private readonly ipfsGateway: string
+  private readonly preferAdapterDownload: boolean
 
   constructor(config: AclClientConfig) {
     this.suiClient = config.suiClient
@@ -54,6 +57,39 @@ export class AclClient {
     this.indexerUrl = config.indexerUrl ?? DEFAULT_INDEXER_URL
     this.apiKey = config.apiKey
     this.sessionKeyTtlMin = config.sessionKeyTtlMin ?? 10
+    this.ipfsGateway = config.ipfsGateway ?? DEFAULT_IPFS_GATEWAY
+    this.preferAdapterDownload = config.preferAdapterDownload ?? false
+  }
+
+  /**
+   * Fetch an entry's encrypted bytes from its on-chain `uri`, independent of
+   * which storage adapter wrote it. By default this resolves the `uri`
+   * generically (scheme-routed fetch + format sniffing) and only falls back to
+   * `storageAdapter.download` when that fails — so a reader with a mismatched
+   * or minimal adapter can still read any publicly fetchable blob. Private,
+   * auth-gated backends are reached via the adapter fallback (or, if you know
+   * every blob is private, set `preferAdapterDownload` to skip the probe).
+   */
+  private async resolveBlob(uri: string): Promise<Uint8Array> {
+    const generic = (): Promise<Uint8Array> =>
+      downloadBlob(uri, { ipfsGateway: this.ipfsGateway })
+    const adapter = (): Promise<Uint8Array> => this.storageAdapter.download(uri)
+
+    const [primary, fallback] = this.preferAdapterDownload
+      ? [adapter, generic]
+      : [generic, adapter]
+
+    try {
+      return await primary()
+    } catch (primaryErr) {
+      try {
+        return await fallback()
+      } catch {
+        // Surface the primary error — it names the resolution actually
+        // configured as the default path.
+        throw primaryErr
+      }
+    }
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -314,7 +350,7 @@ export class AclClient {
       )
     }
 
-    const encrypted = await this.storageAdapter.download(entry.uri)
+    const encrypted = await this.resolveBlob(entry.uri)
 
     return sealDecrypt({
       packageId: this.packageId,
