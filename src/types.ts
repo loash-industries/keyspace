@@ -141,12 +141,27 @@ export interface AclClientConfig {
   /** @mysten/seal SealClient instance (pre-configured with key servers) */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sealClient: any
-  /** Published armature_vault package ID */
-  packageId: string
-  /** Signs and submits PTBs; must return objectChanges for mutation methods */
-  executor: TransactionExecutor
-  /** Encrypted blob storage backend */
-  storageAdapter: StorageAdapter
+  /**
+   * Published armature_vault package ID. Optional — defaults to
+   * `DEFAULT_PACKAGE_ID` (the testnet armature_vault *original* id). Needed on
+   * both the read (`seal_approve`) and write paths; override for mainnet or any
+   * non-default deployment.
+   */
+  packageId?: string
+  /**
+   * Signs and submits PTBs; must return objectChanges for mutation methods.
+   * Optional — only mutations (`createAcl`, `grant`/`revoke`,
+   * `writeData`/`editData`, rotation) call it, so a read/decrypt-only client
+   * can omit it. Calling a write method without it throws `ExecutorRequired`.
+   */
+  executor?: TransactionExecutor
+  /**
+   * Encrypted blob storage backend. Optional — reads resolve blobs generically
+   * (see `ipfsGateway`), so a read/decrypt-only client can omit it. Required
+   * for writes (uploads) and used as the private-backend read fallback when
+   * present. Calling a write method without it throws `StorageAdapterRequired`.
+   */
+  storageAdapter?: StorageAdapter
   /**
    * Default OU object ID to pass for operations that require the on-chain
    * `&DAO` witness. Can be overridden per-method. Required for
@@ -158,6 +173,21 @@ export interface AclClientConfig {
    * Defaults to the Trinary Exchange gateway (`https://api.trinary.exchange`).
    */
   indexerUrl?: string
+  /**
+   * IPFS gateway used by the adapter-independent read resolver to fetch
+   * `ipfs://` blobs directly — no write adapter required. Defaults to
+   * `https://gateway.pinata.cloud`. Reads only.
+   */
+  ipfsGateway?: string
+  /**
+   * How reads resolve an entry's `uri`. By default a read fetches the blob
+   * generically (scheme-routed fetch + format sniffing), independent of which
+   * adapter wrote it, and only falls back to `storageAdapter.download` when
+   * that fails — so a reader isn't tied to the write-side adapter. Set `true`
+   * to try `storageAdapter` first and skip the generic probe; useful when every
+   * blob lives in a private backend a plain fetch can't reach.
+   */
+  preferAdapterDownload?: boolean
   /**
    * Trinary Exchange API key used to authenticate indexer requests. Sent as
    * the `x-api-key` header.

@@ -4,6 +4,9 @@ import {
   ObjectStoreStorageAdapter,
   S3ObjectStoreClient,
   getDownloadUrl,
+  downloadBlob,
+  unwrapBlob,
+  DEFAULT_IPFS_GATEWAY,
 } from '../src/storage'
 import type { ObjectStoreClient } from '../src/storage'
 import { AclError, AclClientError } from '../src/errors'
@@ -476,5 +479,106 @@ describe('getDownloadUrl', () => {
   it('returns https:// locations as-is even when a gateway is provided', () => {
     const url = 'https://my-bucket.s3.amazonaws.com/acl-sdk/my-key'
     expect(getDownloadUrl(url, 'https://gateway.pinata.cloud')).toBe(url)
+  })
+})
+
+// ── unwrapBlob ────────────────────────────────────────────────────────────────
+
+describe('unwrapBlob', () => {
+  const DATA = new Uint8Array([0x01, 0x02, 0xff, 0x00, 0xab])
+  const HEX = '0102ff00ab'
+
+  it('decodes a Pinata { blob: hex } JSON envelope', () => {
+    const envelope = new TextEncoder().encode(JSON.stringify({ blob: HEX }))
+    expect(Array.from(unwrapBlob(envelope))).toEqual(Array.from(DATA))
+  })
+
+  it('passes raw (non-UTF-8) ciphertext bytes through unchanged', () => {
+    expect(Array.from(unwrapBlob(DATA))).toEqual(Array.from(DATA))
+  })
+
+  it('passes JSON that is not a { blob } envelope through unchanged', () => {
+    const json = new TextEncoder().encode(JSON.stringify({ notBlob: HEX }))
+    expect(Array.from(unwrapBlob(json))).toEqual(Array.from(json))
+  })
+})
+
+// ── downloadBlob ──────────────────────────────────────────────────────────────
+
+describe('downloadBlob', () => {
+  const DATA = new Uint8Array([0x01, 0x02, 0xff, 0x00, 0xab])
+  const HEX = '0102ff00ab'
+
+  let fetchMock: any
+
+  beforeEach(() => {
+    fetchMock = jest.fn()
+    ;(global as any).fetch = fetchMock
+  })
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  const okResponse = (bytes: Uint8Array) => ({
+    ok: true,
+    status: 200,
+    statusText: 'OK',
+    arrayBuffer: async () => bytes.slice().buffer,
+  })
+
+  it('fetches an https:// blob as-is and returns raw bytes', async () => {
+    const url = 'https://my-bucket.s3.amazonaws.com/acl-sdk/key'
+    fetchMock.mockResolvedValue(okResponse(DATA))
+
+    const result = await downloadBlob(url)
+
+    expect(fetchMock).toHaveBeenCalledWith(url)
+    expect(Array.from(result)).toEqual(Array.from(DATA))
+  })
+
+  it('resolves ipfs:// via the default gateway and unwraps a JSON envelope', async () => {
+    const envelope = new TextEncoder().encode(JSON.stringify({ blob: HEX }))
+    fetchMock.mockResolvedValue(okResponse(envelope))
+
+    const result = await downloadBlob('ipfs://QmTestHash')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${DEFAULT_IPFS_GATEWAY}/ipfs/QmTestHash`,
+    )
+    expect(Array.from(result)).toEqual(Array.from(DATA))
+  })
+
+  it('resolves ipfs:// via a custom gateway when provided', async () => {
+    fetchMock.mockResolvedValue(okResponse(DATA))
+
+    await downloadBlob('ipfs://QmTestHash', {
+      ipfsGateway: 'https://my-gateway.example',
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://my-gateway.example/ipfs/QmTestHash',
+    )
+  })
+
+  it('throws ACL_STORAGE_FETCH_FAILED on a non-ok response', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+      arrayBuffer: async () => new ArrayBuffer(0),
+    })
+
+    await expect(
+      downloadBlob('https://example.com/blob'),
+    ).rejects.toMatchObject({ code: AclError.StorageFetchFailed })
+  })
+
+  it('throws ACL_STORAGE_FETCH_FAILED when fetch itself rejects', async () => {
+    fetchMock.mockRejectedValue(new Error('network down'))
+
+    await expect(
+      downloadBlob('https://example.com/blob'),
+    ).rejects.toMatchObject({ code: AclError.StorageFetchFailed })
   })
 })

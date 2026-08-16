@@ -7,6 +7,8 @@ export enum AclError {
   EntryNotFound = 'ACL_ENTRY_NOT_FOUND',
   IndexerRequired = 'ACL_INDEXER_REQUIRED',
   OuIdRequired = 'ACL_OU_ID_REQUIRED',
+  ExecutorRequired = 'ACL_EXECUTOR_REQUIRED',
+  StorageAdapterRequired = 'ACL_STORAGE_ADAPTER_REQUIRED',
   SessionKeyExpired = 'ACL_SESSION_KEY_EXPIRED',
   StorageUploadFailed = 'ACL_STORAGE_UPLOAD_FAILED',
   StorageFetchFailed = 'ACL_STORAGE_FETCH_FAILED',
