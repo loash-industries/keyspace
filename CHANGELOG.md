@@ -1,3 +1,8 @@
+## 8.2.0 (2026-08-16)
+
+* Merge pull request #16 from loash-industries/feat/locations-batch-apply-edits ([9730333](https://github.com/loash-industries/keyspace/commit/9730333)), closes [#16](https://github.com/loash-industries/keyspace/issues/16)
+* feat: add LocationsClient.applyEdits for batched multi-edits ([9ea4057](https://github.com/loash-industries/keyspace/commit/9ea4057))
+
 ## 8.1.0 (2026-08-15)
 
 * Merge pull request #15 from loash-industries/feat/keyspace-role-runtime-const ([acce796](https://github.com/loash-industries/keyspace/commit/acce796)), closes [#15](https://github.com/loash-industries/keyspace/issues/15)
