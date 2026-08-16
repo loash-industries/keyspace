@@ -2,6 +2,7 @@ export {
   AclClient,
   createPublicAclClient,
   ReadOnlyAclClient,
+  DEFAULT_PACKAGE_ID,
 } from './AclClient'
 export type { PublicAclClient, ReadOnlyAclClientConfig } from './AclClient'
 export { AclError, AclClientError } from './errors'

@@ -9,6 +9,8 @@ import type {
   RotateAllResult,
   RotateResult,
   SignPersonalMessageFn,
+  StorageAdapter,
+  TransactionExecutor,
   WriteResult,
 } from './types'
 import { AclClientError, AclError } from './errors'
@@ -34,6 +36,16 @@ import { downloadBlob, DEFAULT_IPFS_GATEWAY } from './storage'
 /** Default indexer: the Trinary Exchange gateway. */
 const DEFAULT_INDEXER_URL = 'https://api.trinary.exchange'
 
+/**
+ * Default armature_vault package id (testnet). This is the *original* (v1)
+ * published id: Seal derives its decryption identity from it and it stays
+ * stable across package upgrades, so it is a safe default for both the
+ * `seal_approve` and on-chain call paths. Override `packageId` for mainnet or
+ * any non-default deployment.
+ */
+export const DEFAULT_PACKAGE_ID =
+  '0x3af6edb64f575cb65a89f1c8f445a2e2aad05324a1586aad9e2651191bf4f99b'
+
 export class AclClient {
   private readonly suiClient: AclClientConfig['suiClient']
   private readonly sealClient: AclClientConfig['sealClient']
@@ -50,7 +62,7 @@ export class AclClient {
   constructor(config: AclClientConfig) {
     this.suiClient = config.suiClient
     this.sealClient = config.sealClient
-    this.packageId = config.packageId
+    this.packageId = config.packageId ?? DEFAULT_PACKAGE_ID
     this.executor = config.executor
     this.storageAdapter = config.storageAdapter
     this.defaultOuId = config.ouId
@@ -73,23 +85,31 @@ export class AclClient {
   private async resolveBlob(uri: string): Promise<Uint8Array> {
     const generic = (): Promise<Uint8Array> =>
       downloadBlob(uri, { ipfsGateway: this.ipfsGateway })
-    const adapter = (): Promise<Uint8Array> => this.storageAdapter.download(uri)
+    const adapter = this.storageAdapter
+    const viaAdapter = adapter
+      ? (): Promise<Uint8Array> => adapter.download(uri)
+      : null
 
-    const [primary, fallback] = this.preferAdapterDownload
-      ? [adapter, generic]
-      : [generic, adapter]
+    // Generic (adapter-independent) resolver first, the adapter as the
+    // private-backend fallback; `preferAdapterDownload` flips the order. With
+    // no adapter configured, only the generic resolver runs.
+    const steps =
+      this.preferAdapterDownload && viaAdapter
+        ? [viaAdapter, generic]
+        : viaAdapter
+          ? [generic, viaAdapter]
+          : [generic]
 
-    try {
-      return await primary()
-    } catch (primaryErr) {
+    // Surface the first (primary-path) error if every step fails.
+    let firstErr: unknown
+    for (const step of steps) {
       try {
-        return await fallback()
-      } catch {
-        // Surface the primary error — it names the resolution actually
-        // configured as the default path.
-        throw primaryErr
+        return await step()
+      } catch (err) {
+        if (firstErr === undefined) firstErr = err
       }
     }
+    throw firstErr
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -105,11 +125,31 @@ export class AclClient {
     return id
   }
 
+  private requireExecutor(): TransactionExecutor {
+    if (!this.executor) {
+      throw new AclClientError(
+        AclError.ExecutorRequired,
+        'This operation submits an on-chain transaction and needs an `executor` in AclClientConfig. A read/decrypt-only client can omit it.',
+      )
+    }
+    return this.executor
+  }
+
+  private requireStorageAdapter(): StorageAdapter {
+    if (!this.storageAdapter) {
+      throw new AclClientError(
+        AclError.StorageAdapterRequired,
+        'This operation uploads an encrypted blob and needs a `storageAdapter` in AclClientConfig. Reads resolve blobs without one.',
+      )
+    }
+    return this.storageAdapter
+  }
+
   // ── Keyspace lifecycle ──────────────────────────────────────────────────────
 
   async createAcl(opts: { name: string }): Promise<CreateAclResult> {
     const tx = createKeyspaceTx(this.packageId, opts.name)
-    const result = await this.executor(tx)
+    const result = await this.requireExecutor()(tx)
     const changes = result.objectChanges ?? []
 
     const created = changes.find(
@@ -155,7 +195,7 @@ export class AclClient {
       opts.readPrincipals ?? [],
       opts.writePrincipals ?? [],
     )
-    const result = await this.executor(tx)
+    const result = await this.requireExecutor()(tx)
     const changes = result.objectChanges ?? []
 
     const created = changes.find(
@@ -215,7 +255,7 @@ export class AclClient {
       opts.keyspaceRole,
       opts.principal,
     )
-    await this.executor(tx)
+    await this.requireExecutor()(tx)
     const meta = await this.getAclMeta(opts.aclId)
     return { epoch: meta.epoch }
   }
@@ -238,7 +278,7 @@ export class AclClient {
       opts.keyspaceRole,
       opts.principal,
     )
-    await this.executor(tx)
+    await this.requireExecutor()(tx)
     const meta = await this.getAclMeta(opts.aclId)
     return { epoch: meta.epoch }
   }
@@ -277,7 +317,7 @@ export class AclClient {
       ouId,
       opts.newDescription,
     )
-    await this.executor(tx)
+    await this.requireExecutor()(tx)
   }
 
   async writeData(opts: {
@@ -303,7 +343,7 @@ export class AclClient {
       data,
     )
 
-    const uri = await this.storageAdapter.upload(encrypted)
+    const uri = await this.requireStorageAdapter().upload(encrypted)
 
     const tx = publishEntryTx(
       this.packageId,
@@ -312,7 +352,7 @@ export class AclClient {
       uri,
       opts.description,
     )
-    const result = await this.executor(tx)
+    const result = await this.requireExecutor()(tx)
 
     const entryChange = (result.objectChanges ?? []).find(
       (c) =>
@@ -388,10 +428,10 @@ export class AclClient {
       data,
     )
 
-    const uri = await this.storageAdapter.upload(encrypted)
+    const uri = await this.requireStorageAdapter().upload(encrypted)
 
     const tx = editEntryTx(this.packageId, opts.aclId, opts.entryId, ouId, uri)
-    await this.executor(tx)
+    await this.requireExecutor()(tx)
 
     return { entryId: opts.entryId, uri, epoch: meta.epoch }
   }
@@ -438,7 +478,7 @@ export class AclClient {
       plaintext,
     )
 
-    const newUri = await this.storageAdapter.upload(encrypted)
+    const newUri = await this.requireStorageAdapter().upload(encrypted)
 
     const tx = updateEntryTx(
       this.packageId,
@@ -447,7 +487,7 @@ export class AclClient {
       ouId,
       newUri,
     )
-    await this.executor(tx)
+    await this.requireExecutor()(tx)
 
     return { newUri, epoch: meta.epoch }
   }

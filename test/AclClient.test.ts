@@ -43,7 +43,8 @@ jest.unstable_mockModule('../src/storage', () => ({
 
 // ── Dynamic imports after mock registration ────────────────────────────────────
 
-const { AclClient, createPublicAclClient } = await import('../src/AclClient')
+const { AclClient, createPublicAclClient, DEFAULT_PACKAGE_ID } =
+  await import('../src/AclClient')
 
 // ── Valid Sui addresses (32 bytes = 64 hex chars) ─────────────────────────────
 
@@ -991,5 +992,73 @@ describe('rotateAllStaleEntries', () => {
     expect(onProgress).toHaveBeenCalledTimes(2)
     expect(onProgress).toHaveBeenNthCalledWith(1, 1, 2)
     expect(onProgress).toHaveBeenNthCalledWith(2, 2, 2)
+  })
+})
+
+// ── Optional config params (packageId / executor / storageAdapter) ─────────────
+
+describe('optional config params', () => {
+  const signPersonalMessage = (jest.fn() as any).mockResolvedValue('sig')
+
+  it('defaults packageId to DEFAULT_PACKAGE_ID when omitted', async () => {
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 1 }))
+    mockFetchEncryptedEntry.mockResolvedValue(makeEntry())
+    mockSealDecrypt.mockResolvedValue(PLAINTEXT)
+    mockDownloadBlob.mockReset().mockResolvedValue(ENCRYPTED)
+
+    const client = makeClient({ packageId: undefined })
+    await client.readData({
+      aclId: ACL_ID,
+      entryId: ENTRY_ID,
+      walletAddress: OWNER,
+      signPersonalMessage,
+    })
+
+    expect(mockSealDecrypt).toHaveBeenCalledWith(
+      expect.objectContaining({ packageId: DEFAULT_PACKAGE_ID }),
+    )
+  })
+
+  it('reads/decrypts with neither executor nor storageAdapter configured', async () => {
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 1 }))
+    mockFetchEncryptedEntry.mockResolvedValue(makeEntry())
+    mockSealDecrypt.mockResolvedValue(PLAINTEXT)
+    mockDownloadBlob.mockReset().mockResolvedValue(ENCRYPTED)
+
+    const client = makeClient({
+      executor: undefined,
+      storageAdapter: undefined,
+    })
+    const result = await client.readData({
+      aclId: ACL_ID,
+      entryId: ENTRY_ID,
+      walletAddress: OWNER,
+      signPersonalMessage,
+    })
+
+    expect(result).toBe(PLAINTEXT)
+  })
+
+  it('throws ExecutorRequired when a write is attempted without an executor', async () => {
+    const client = makeClient({ executor: undefined })
+    await expect(client.createAcl({ name: 'x' })).rejects.toMatchObject({
+      code: AclError.ExecutorRequired,
+    })
+  })
+
+  it('throws StorageAdapterRequired when a write is attempted without a storageAdapter', async () => {
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 1 }))
+    mockSealEncrypt.mockResolvedValue(ENCRYPTED)
+
+    const client = makeClient({ storageAdapter: undefined })
+    await expect(
+      client.writeData({
+        aclId: ACL_ID,
+        plaintext: PLAINTEXT,
+        description: 'd',
+        walletAddress: OWNER,
+        signPersonalMessage,
+      }),
+    ).rejects.toMatchObject({ code: AclError.StorageAdapterRequired })
   })
 })
