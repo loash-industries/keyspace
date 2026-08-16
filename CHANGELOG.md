@@ -1,3 +1,9 @@
+## 8.3.0 (2026-08-16)
+
+* Merge pull request #17 from loash-industries/feat/adapter-independent-blob-download ([d32e9f4](https://github.com/loash-industries/keyspace/commit/d32e9f4)), closes [#17](https://github.com/loash-industries/keyspace/issues/17)
+* feat: adapter-independent blob download on the read path ([6383a2b](https://github.com/loash-industries/keyspace/commit/6383a2b))
+* feat: make packageId, executor, and storageAdapter optional at construction ([0c329e5](https://github.com/loash-industries/keyspace/commit/0c329e5))
+
 ## 8.2.0 (2026-08-16)
 
 * Merge pull request #16 from loash-industries/feat/locations-batch-apply-edits ([9730333](https://github.com/loash-industries/keyspace/commit/9730333)), closes [#16](https://github.com/loash-industries/keyspace/issues/16)
