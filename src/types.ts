@@ -1,12 +1,14 @@
 import type { Transaction } from '@mysten/sui/transactions'
 
 // ── Principal ─────────────────────────────────────────────────────────────────
-// 'player' and 'ou' mirror armature_vault::acl::Principal, whose variant set
-// is FROZEN by Sui upgrade compatibility. 'machine' is an SDK-level principal:
-// on-chain it lives in the keyspace's machine ACL (a versioned dynamic field),
-// granted via keyspace::grant_machine, and is merged into AclDetail's role
-// sets on read. Same authorization rule as 'player' (addr == sender), but
-// typed so indexers and UIs can tell machine access apart from human access.
+// 'player' and 'ou' mirror armature_vault::acl::Principal, whose variant set is
+// FROZEN by Sui upgrade compatibility. That is why 'machine' exists only in the
+// upgradeable v2 store (armature_vault::acl_v2::PrincipalV2, held in a versioned
+// dynamic field on the Keyspace): it is granted via keyspace::grant_v2 and
+// merged into AclDetail's role sets on read, so callers see one list per role
+// regardless of which store a principal lives in. Same authorization rule as
+// 'player' (addr == sender), but typed so indexers and UIs can tell machine
+// access apart from human access.
 
 export type Principal =
   | { type: 'player'; address: string }
@@ -209,4 +211,32 @@ export interface AclClientConfig {
   apiKey: string
   /** Seal session key TTL in minutes (default: 10) */
   sessionKeyTtlMin?: number
+  /**
+   * Migrate a keyspace's principals from the frozen v1 ACL to the upgradeable
+   * v2 store automatically, the next time this client mutates it. Default
+   * `false`.
+   *
+   * When on, mutating calls prepend `keyspace::migrate_acl_to_v2` to their own
+   * PTB, so migration happens in the same transaction as the change that
+   * triggered it — no separate migration campaign, and no extra signature. The
+   * migration is access-neutral and idempotent on-chain, and deliberately does
+   * NOT bump the keyspace `epoch`, so it never marks entries stale or forces a
+   * re-encryption sweep. Each keyspace is migrated at most once per client
+   * instance; afterwards the prelude is skipped.
+   *
+   * `grant`/`revoke` always carry the prelude (their caller must satisfy
+   * `Grant`, which is exactly what the migration requires). Entry writes
+   * (`writeData`, `editData`, `rotateEntry`) only carry it when the acting
+   * wallet also holds `Grant` — a writer who is not a grantor would otherwise
+   * abort the whole transaction. `editDescription` never carries it: it takes
+   * no wallet address, so the check isn't possible.
+   *
+   * Leave this off until the v3+ armature_vault upgrade is published to the
+   * network you point at — `migrate_acl_to_v2` and `grant_v2` do not exist in
+   * earlier deployments, so every mutation would fail. Also make sure every
+   * consumer reading these keyspaces is on an SDK that understands the v2 store
+   * (this major does): migration empties the object's v1 `acl` field, and an
+   * older SDK reads that field directly and would see no principals.
+   */
+  autoMigrateAcl?: boolean
 }

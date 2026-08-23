@@ -1,8 +1,11 @@
+import { Transaction } from '@mysten/sui/transactions'
 import {
+  addMigrateAclToV2Call,
   createKeyspaceTx,
   createKeyspaceForOuTx,
   grantTx,
   grantV2Tx,
+  migrateAclToV2Tx,
   revokeTx,
   revokeV2Tx,
   publishEntryTx,
@@ -199,5 +202,77 @@ describe('createKeyspaceForOuTx', () => {
     const tx1 = createKeyspaceForOuTx(PKG, OU, 'A', [ouPrincipal], [], [])
     const tx2 = createKeyspaceForOuTx(PKG, OU, 'A', [ouPrincipal], [], [])
     expect(tx1).not.toBe(tx2)
+  })
+})
+
+// ── migration prelude composition ─────────────────────────────────────────────
+//
+// The auto-migration path depends on ordering: migrate_acl_to_v2 must run
+// BEFORE the operation it rides with, in the SAME transaction. Assert on the
+// PTB's actual command list rather than just "returns an object".
+
+/** The `pkg::module::function` target of each moveCall in `tx`, in order. */
+function moveCallTargets(tx: Transaction): string[] {
+  return tx
+    .getData()
+    .commands.flatMap((c) =>
+      c.MoveCall ? [`${c.MoveCall.module}::${c.MoveCall.function}`] : [],
+    )
+}
+
+describe('migration prelude composition', () => {
+  it('migrateAclToV2Tx builds a single migrate call', () => {
+    expect(moveCallTargets(migrateAclToV2Tx(PKG, ACL, OU))).toEqual([
+      'keyspace::migrate_acl_to_v2',
+    ])
+  })
+
+  it('addMigrateAclToV2Call appends into an existing transaction', () => {
+    const tx = new Transaction()
+    addMigrateAclToV2Call(tx, PKG, ACL, OU)
+    expect(moveCallTargets(tx)).toEqual(['keyspace::migrate_acl_to_v2'])
+  })
+
+  it('grantV2Tx appends to a base tx, keeping the prelude first', () => {
+    const base = new Transaction()
+    addMigrateAclToV2Call(base, PKG, ACL, OU)
+    const tx = grantV2Tx(PKG, ACL, OU, 'Read', machinePrincipal, base)
+
+    expect(tx).toBe(base)
+    expect(moveCallTargets(tx)).toEqual([
+      'keyspace::migrate_acl_to_v2',
+      'keyspace::grant_v2',
+    ])
+  })
+
+  it('revokeV2Tx appends to a base tx, keeping the prelude first', () => {
+    const base = new Transaction()
+    addMigrateAclToV2Call(base, PKG, ACL, OU)
+    const tx = revokeV2Tx(PKG, ACL, OU, 'Read', playerPrincipal, base)
+
+    expect(moveCallTargets(tx)).toEqual([
+      'keyspace::migrate_acl_to_v2',
+      'keyspace::revoke_v2',
+    ])
+  })
+
+  it('entry builders compose with the prelude too', () => {
+    const base = new Transaction()
+    addMigrateAclToV2Call(base, PKG, ACL, OU)
+    const tx = publishEntryTx(PKG, ACL, OU, 'ipfs://cid', 'desc', base)
+
+    expect(moveCallTargets(tx)).toEqual([
+      'keyspace::migrate_acl_to_v2',
+      'keyspace::publish_entry',
+    ])
+  })
+
+  it('builders still create a standalone tx when no base is passed', () => {
+    expect(
+      moveCallTargets(grantV2Tx(PKG, ACL, OU, 'Read', playerPrincipal)),
+    ).toEqual(['keyspace::grant_v2'])
+    expect(
+      moveCallTargets(updateEntryTx(PKG, ACL, ENTRY, OU, 'ipfs://new')),
+    ).toEqual(['keyspace::update_entry'])
   })
 })

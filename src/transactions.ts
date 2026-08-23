@@ -79,6 +79,16 @@ function textBytes(s: string): number[] {
   return Array.from(new TextEncoder().encode(s))
 }
 
+/**
+ * The PTB a builder should add its call to: an existing one when the caller is
+ * composing (e.g. after {@link addMigrateAclToV2Call}), otherwise a fresh one.
+ * Builders that accept `baseTx` always *append*, so calls run in the order they
+ * were added.
+ */
+function txOf(baseTx?: Transaction): Transaction {
+  return baseTx ?? new Transaction()
+}
+
 function buildPrincipalArg(tx: Transaction, packageId: string, p: Principal) {
   switch (p.type) {
     case 'player':
@@ -162,8 +172,9 @@ export function grantTx(
   ouId: string,
   role: KeyspaceRole,
   principal: Principal,
+  baseTx?: Transaction,
 ): Transaction {
-  const tx = new Transaction()
+  const tx = txOf(baseTx)
   tx.moveCall({
     target: `${packageId}::keyspace::grant`,
     arguments: [
@@ -187,8 +198,9 @@ export function grantV2Tx(
   ouId: string,
   role: KeyspaceRole,
   principal: Principal,
+  baseTx?: Transaction,
 ): Transaction {
-  const tx = new Transaction()
+  const tx = txOf(baseTx)
   tx.moveCall({
     target: `${packageId}::keyspace::grant_v2`,
     arguments: [
@@ -208,8 +220,9 @@ export function revokeV2Tx(
   ouId: string,
   role: KeyspaceRole,
   principal: Principal,
+  baseTx?: Transaction,
 ): Transaction {
-  const tx = new Transaction()
+  const tx = txOf(baseTx)
   tx.moveCall({
     target: `${packageId}::keyspace::revoke_v2`,
     arguments: [
@@ -220,6 +233,30 @@ export function revokeV2Tx(
     ],
   })
   return tx
+}
+
+/**
+ * Append `keyspace::migrate_acl_to_v2(keyspace, dao)` to an existing PTB.
+ *
+ * Exposed separately from {@link migrateAclToV2Tx} so migration can ride along
+ * on a transaction that already does something else — call this *before* the
+ * operation's own moveCall and the migration executes first, in the same
+ * transaction. That ordering matters: once the migration runs, the v1 lists are
+ * empty, so any later call in the same PTB must target the v2 store.
+ *
+ * The caller must satisfy `Grant` — the same requirement `migrate_acl_to_v2`
+ * itself enforces — or the whole transaction aborts with `ENotAllowed`.
+ */
+export function addMigrateAclToV2Call(
+  tx: Transaction,
+  packageId: string,
+  keyspaceId: string,
+  ouId: string,
+): void {
+  tx.moveCall({
+    target: `${packageId}::keyspace::migrate_acl_to_v2`,
+    arguments: [tx.object(keyspaceId), tx.object(ouId)],
+  })
 }
 
 /**
@@ -234,10 +271,7 @@ export function migrateAclToV2Tx(
   ouId: string,
 ): Transaction {
   const tx = new Transaction()
-  tx.moveCall({
-    target: `${packageId}::keyspace::migrate_acl_to_v2`,
-    arguments: [tx.object(keyspaceId), tx.object(ouId)],
-  })
+  addMigrateAclToV2Call(tx, packageId, keyspaceId, ouId)
   return tx
 }
 
@@ -248,8 +282,9 @@ export function revokeTx(
   ouId: string,
   role: KeyspaceRole,
   principal: Principal,
+  baseTx?: Transaction,
 ): Transaction {
-  const tx = new Transaction()
+  const tx = txOf(baseTx)
   tx.moveCall({
     target: `${packageId}::keyspace::revoke`,
     arguments: [
@@ -269,8 +304,9 @@ export function publishEntryTx(
   ouId: string,
   uri: string,
   description: string,
+  baseTx?: Transaction,
 ): Transaction {
-  const tx = new Transaction()
+  const tx = txOf(baseTx)
   tx.moveCall({
     target: `${packageId}::keyspace::publish_entry`,
     arguments: [
@@ -290,8 +326,9 @@ export function updateEntryTx(
   entryId: string,
   ouId: string,
   newUri: string,
+  baseTx?: Transaction,
 ): Transaction {
-  const tx = new Transaction()
+  const tx = txOf(baseTx)
   tx.moveCall({
     target: `${packageId}::keyspace::update_entry`,
     arguments: [
@@ -311,8 +348,9 @@ export function editEntryTx(
   entryId: string,
   ouId: string,
   newUri: string,
+  baseTx?: Transaction,
 ): Transaction {
-  const tx = new Transaction()
+  const tx = txOf(baseTx)
   tx.moveCall({
     target: `${packageId}::keyspace::edit_entry`,
     arguments: [

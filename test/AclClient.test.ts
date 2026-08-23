@@ -420,6 +420,228 @@ describe('revoke store routing', () => {
   })
 })
 
+// ── auto-migration to the v2 principal store ──────────────────────────────────
+
+/**
+ * The `module::function` of each moveCall in the PTB handed to `executor`,
+ * in order — so a test can assert both that the migration prelude is present
+ * and that it runs BEFORE the operation it rides with.
+ */
+function executedTargets(executor: any, call = 0): string[] {
+  const tx = executor.mock.calls[call][0]
+  return tx
+    .getData()
+    .commands.flatMap((c: any) =>
+      c.MoveCall ? [`${c.MoveCall.module}::${c.MoveCall.function}`] : [],
+    )
+}
+
+const ENTRY_CHANGES = {
+  digest: '0xd',
+  objectChanges: [
+    {
+      type: 'created',
+      objectId: ENTRY_ID,
+      objectType: `${PKG}::keyspace::EncryptedEntry`,
+    },
+  ],
+}
+
+describe('auto-migration (autoMigrateAcl)', () => {
+  const signPersonalMessage = (jest.fn() as any).mockResolvedValue('sig')
+
+  beforeEach(() => {
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 2 }))
+    mockSealEncrypt.mockResolvedValue(ENCRYPTED)
+  })
+
+  it('is off by default — no prelude, and revoke still probes the store', async () => {
+    const executor = makeExecutor()
+    const client = makeClient({ executor })
+
+    await client.revoke({
+      aclId: ACL_ID,
+      keyspaceRole: 'Read',
+      principal: { type: 'player', address: MEMBER },
+      ouId: OU_ID,
+    })
+
+    expect(executedTargets(executor)).toEqual(['keyspace::revoke'])
+    expect(mockFetchPrincipalRoleMapV2).toHaveBeenCalledTimes(1)
+  })
+
+  it('grant carries the prelude first and routes to the v2 store', async () => {
+    const executor = makeExecutor()
+    const client = makeClient({ executor, autoMigrateAcl: true })
+
+    await client.grant({
+      aclId: ACL_ID,
+      keyspaceRole: 'Read',
+      principal: { type: 'player', address: MEMBER },
+      ouId: OU_ID,
+    })
+
+    expect(executedTargets(executor)).toEqual([
+      'keyspace::migrate_acl_to_v2',
+      'keyspace::grant_v2',
+    ])
+  })
+
+  it('revoke carries the prelude, targets v2, and skips the store probe', async () => {
+    const executor = makeExecutor()
+    const client = makeClient({ executor, autoMigrateAcl: true })
+
+    await client.revoke({
+      aclId: ACL_ID,
+      keyspaceRole: 'Read',
+      principal: { type: 'player', address: MEMBER },
+      ouId: OU_ID,
+    })
+
+    expect(executedTargets(executor)).toEqual([
+      'keyspace::migrate_acl_to_v2',
+      'keyspace::revoke_v2',
+    ])
+    // The probe existed only to find which store held the principal; after
+    // migration everything is in v2, so it is pure overhead.
+    expect(mockFetchPrincipalRoleMapV2).not.toHaveBeenCalled()
+  })
+
+  it('migrates a given keyspace at most once per client', async () => {
+    const executor = makeExecutor()
+    const client = makeClient({ executor, autoMigrateAcl: true })
+    const grant = () =>
+      client.grant({
+        aclId: ACL_ID,
+        keyspaceRole: 'Read',
+        principal: { type: 'player', address: MEMBER },
+        ouId: OU_ID,
+      })
+
+    await grant()
+    await grant()
+
+    expect(executedTargets(executor, 0)).toEqual([
+      'keyspace::migrate_acl_to_v2',
+      'keyspace::grant_v2',
+    ])
+    expect(executedTargets(executor, 1)).toEqual(['keyspace::grant_v2'])
+  })
+
+  it('an explicit migrateAclToV2 stops later mutations re-prepending it', async () => {
+    const executor = makeExecutor()
+    const client = makeClient({ executor, autoMigrateAcl: true })
+
+    await client.migrateAclToV2({ aclId: ACL_ID, ouId: OU_ID })
+    await client.grant({
+      aclId: ACL_ID,
+      keyspaceRole: 'Read',
+      principal: { type: 'player', address: MEMBER },
+      ouId: OU_ID,
+    })
+
+    expect(executedTargets(executor, 1)).toEqual(['keyspace::grant_v2'])
+  })
+
+  it('writeData carries the prelude when the writer also holds Grant', async () => {
+    const executor = (jest.fn() as any).mockResolvedValue(ENTRY_CHANGES)
+    mockFetchKeyspaceDetail.mockResolvedValue(
+      makeAclDetail({ grantPrincipals: [{ type: 'player', address: OWNER }] }),
+    )
+    const client = makeClient({ executor, autoMigrateAcl: true })
+
+    await client.writeData({
+      aclId: ACL_ID,
+      plaintext: PLAINTEXT,
+      description: 'my data',
+      walletAddress: OWNER,
+      signPersonalMessage,
+    })
+
+    expect(executedTargets(executor)).toEqual([
+      'keyspace::migrate_acl_to_v2',
+      'keyspace::publish_entry',
+    ])
+  })
+
+  it('writeData skips the prelude for a writer who is not a grantor', async () => {
+    const executor = (jest.fn() as any).mockResolvedValue(ENTRY_CHANGES)
+    // MEMBER can write but holds no Grant — prepending the migration would
+    // abort the whole transaction with ENotAllowed.
+    mockFetchKeyspaceDetail.mockResolvedValue(
+      makeAclDetail({
+        grantPrincipals: [{ type: 'player', address: OWNER }],
+        writePrincipals: [{ type: 'player', address: MEMBER }],
+      }),
+    )
+    const client = makeClient({ executor, autoMigrateAcl: true })
+
+    await client.writeData({
+      aclId: ACL_ID,
+      plaintext: PLAINTEXT,
+      description: 'my data',
+      walletAddress: MEMBER,
+      signPersonalMessage,
+    })
+
+    expect(executedTargets(executor)).toEqual(['keyspace::publish_entry'])
+  })
+
+  it('writeData counts an OU grantor via the configured ouId', async () => {
+    const executor = (jest.fn() as any).mockResolvedValue(ENTRY_CHANGES)
+    mockFetchKeyspaceDetail.mockResolvedValue(
+      makeAclDetail({ grantPrincipals: [{ type: 'ou', ouId: OU_ID }] }),
+    )
+    const client = makeClient({ executor, autoMigrateAcl: true })
+
+    await client.writeData({
+      aclId: ACL_ID,
+      plaintext: PLAINTEXT,
+      description: 'my data',
+      walletAddress: MEMBER,
+      signPersonalMessage,
+    })
+
+    expect(executedTargets(executor)).toEqual([
+      'keyspace::migrate_acl_to_v2',
+      'keyspace::publish_entry',
+    ])
+  })
+
+  it('a failed Grant probe degrades to no prelude rather than failing the write', async () => {
+    const executor = (jest.fn() as any).mockResolvedValue(ENTRY_CHANGES)
+    mockFetchKeyspaceDetail.mockRejectedValue(new Error('rpc down'))
+    const client = makeClient({ executor, autoMigrateAcl: true })
+
+    await client.writeData({
+      aclId: ACL_ID,
+      plaintext: PLAINTEXT,
+      description: 'my data',
+      walletAddress: OWNER,
+      signPersonalMessage,
+    })
+
+    expect(executedTargets(executor)).toEqual(['keyspace::publish_entry'])
+  })
+
+  it('editDescription never carries the prelude — it takes no wallet address', async () => {
+    const executor = makeExecutor()
+    mockFetchKeyspaceDetail.mockResolvedValue(
+      makeAclDetail({ grantPrincipals: [{ type: 'player', address: OWNER }] }),
+    )
+    const client = makeClient({ executor, autoMigrateAcl: true })
+
+    await client.editDescription({
+      aclId: ACL_ID,
+      entryId: ENTRY_ID,
+      newDescription: 'new',
+      ouId: OU_ID,
+    })
+
+    expect(executedTargets(executor)).toEqual(['keyspace::edit_description'])
+  })
+})
+
 // ── grant / revoke ────────────────────────────────────────────────────────────
 
 describe('grant', () => {

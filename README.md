@@ -147,6 +147,63 @@ await aclClient.removeRole({
 // Call rotateAllStaleEntries() so the removed member loses read access to old data.
 ```
 
+### Machine principals and the v2 ACL
+
+A keyspace has two principal stores. The original one holds `player` and `ou`
+principals and can never gain a new kind — its on-chain type is an enum, and Sui
+upgrade compatibility freezes a published enum's variant set forever. The v2
+store is the upgradeable successor: it carries the kind as data, which is what
+makes `machine` principals (server-held keypairs, as opposed to human wallets)
+possible at all.
+
+Both stores are live at once. The contract checks both when authorizing, and
+reads merge them, so `getAcl()` returns one list per role and you normally never
+need to know which store a principal came from:
+
+```ts
+// Routed to the v2 store automatically — machine exists nowhere else.
+await aclClient.grant({
+  aclId,
+  keyspaceRole: 'Read',
+  principal: { type: 'machine', address: '0xabc...' },
+  ouId,
+})
+```
+
+Machine principals require an armature_vault v3+ deployment.
+
+### Migrating a keyspace to the v2 store
+
+Existing `player`/`ou` principals keep working indefinitely where they are, but
+you can lift them into the v2 store. Migration is access-neutral (each principal
+still admits exactly the same senders), idempotent, and deliberately does *not*
+bump the keyspace epoch — so it never marks entries stale or triggers a
+re-encryption sweep. Explicitly:
+
+```ts
+await aclClient.migrateAclToV2({ aclId, ouId }) // caller must hold Grant
+```
+
+Or set `autoMigrateAcl` and let it happen on the next change to a keyspace's
+ACL or entries. Mutations then prepend the migration to their own transaction,
+so it costs no extra signature and no separate migration pass:
+
+```ts
+const aclClient = new AclClient({ ...config, autoMigrateAcl: true })
+```
+
+Each keyspace migrates at most once per client. `grant`/`revoke` always carry
+it; entry writes carry it only when the acting wallet also holds `Grant`, since
+a writer who is not a grantor would otherwise abort the whole transaction.
+
+Two things to check before turning it on:
+
+- The network you point at must run armature_vault **v3+**. `migrate_acl_to_v2`
+  does not exist in earlier deployments, so every mutation would fail.
+- Every consumer reading these keyspaces should be on this SDK major. Migration
+  empties the object's v1 `acl` field, and an older SDK reads that field
+  directly — it would see no principals.
+
 ### Write encrypted data
 
 ```ts
