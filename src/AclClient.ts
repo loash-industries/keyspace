@@ -13,15 +13,20 @@ import type {
   TransactionExecutor,
   WriteResult,
 } from './types'
+import { Transaction } from '@mysten/sui/transactions'
 import { AclClientError, AclError } from './errors'
 import {
+  addMigrateAclToV2Call,
   createKeyspaceTx,
   createKeyspaceForOuTx,
   editDescriptionTx,
   editEntryTx,
   grantTx,
+  grantV2Tx,
+  migrateAclToV2Tx,
   publishEntryTx,
   revokeTx,
+  revokeV2Tx,
   updateEntryTx,
 } from './transactions'
 import {
@@ -29,6 +34,7 @@ import {
   fetchEncryptedEntry,
   fetchKeyspaceDetail,
   fetchKeyspaceMeta,
+  fetchPrincipalRoleMapV2,
 } from './queries'
 import { sealDecrypt, sealEncrypt } from './seal_helpers'
 import { downloadBlob, DEFAULT_IPFS_GATEWAY } from './storage'
@@ -58,6 +64,15 @@ export class AclClient {
   private readonly sessionKeyTtlMin: number
   private readonly ipfsGateway: string
   private readonly preferAdapterDownload: boolean
+  private readonly autoMigrateAcl: boolean
+  /**
+   * Keyspaces this client has already carried a migration prelude for (or found
+   * nothing to migrate in). Bounds the prelude to one attempt per keyspace per
+   * client, so steady-state mutations pay nothing. Not persisted — a fresh
+   * client retries once, which is harmless because the migration is idempotent
+   * on-chain.
+   */
+  private readonly migratedAcls = new Set<string>()
 
   constructor(config: AclClientConfig) {
     this.suiClient = config.suiClient
@@ -71,6 +86,7 @@ export class AclClient {
     this.sessionKeyTtlMin = config.sessionKeyTtlMin ?? 10
     this.ipfsGateway = config.ipfsGateway ?? DEFAULT_IPFS_GATEWAY
     this.preferAdapterDownload = config.preferAdapterDownload ?? false
+    this.autoMigrateAcl = config.autoMigrateAcl ?? false
   }
 
   /**
@@ -133,6 +149,72 @@ export class AclClient {
       )
     }
     return this.executor
+  }
+
+  // ── Auto-migration to the v2 principal store ────────────────────────────────
+  //
+  // See `autoMigrateAcl` in AclClientConfig for the full contract. The prelude
+  // rides on the mutation's own PTB and must be added BEFORE the operation's
+  // moveCall, since after it runs the v1 lists are empty and anything later in
+  // the same transaction has to target v2.
+
+  /**
+   * Start a PTB for a mutation on `aclId`, carrying the migration prelude when
+   * auto-migration is on and this keyspace hasn't been handled yet. Returns the
+   * transaction plus whether the prelude was added — callers use that to route
+   * to the v2 entry points and to update the cache after execution.
+   */
+  private beginMutation(
+    aclId: string,
+    ouId: string,
+  ): { tx: Transaction; migrating: boolean } {
+    const tx = new Transaction()
+    if (!this.autoMigrateAcl || this.migratedAcls.has(aclId)) {
+      return { tx, migrating: false }
+    }
+    addMigrateAclToV2Call(tx, this.packageId, aclId, ouId)
+    return { tx, migrating: true }
+  }
+
+  /**
+   * True when `address` satisfies the `Grant` role — the precondition
+   * `migrate_acl_to_v2` enforces. Reads the merged role set, so a grantor in
+   * either ACL store counts, exactly as the contract's `satisfies_role` does.
+   * Used to decide whether an entry write can safely carry the prelude.
+   */
+  private async holdsGrant(
+    aclId: string,
+    address: string,
+    ouId: string,
+  ): Promise<boolean> {
+    try {
+      const detail = await this.getAcl(aclId)
+      return detail.grantPrincipals.some((p) =>
+        p.type === 'ou' ? p.ouId === ouId : p.address === address,
+      )
+    } catch {
+      // A failed probe must not break the write it was only trying to
+      // piggyback on — skip the prelude and let the mutation proceed alone.
+      return false
+    }
+  }
+
+  /**
+   * Same as {@link beginMutation}, but for operations whose caller only needs
+   * `Write`: the prelude is added only if `address` also holds `Grant`.
+   */
+  private async beginEntryMutation(
+    aclId: string,
+    ouId: string,
+    address: string,
+  ): Promise<{ tx: Transaction; migrating: boolean }> {
+    if (!this.autoMigrateAcl || this.migratedAcls.has(aclId)) {
+      return { tx: new Transaction(), migrating: false }
+    }
+    if (!(await this.holdsGrant(aclId, address, ouId))) {
+      return { tx: new Transaction(), migrating: false }
+    }
+    return this.beginMutation(aclId, ouId)
   }
 
   private requireStorageAdapter(): StorageAdapter {
@@ -240,22 +322,44 @@ export class AclClient {
    * Grant `principal` the `keyspaceRole` on `aclId`.
    * Caller must already hold the Grant role.
    * `ouId` overrides the config-level default.
+   *
+   * `player` and `ou` principals go to the original (v1) ACL, preserving
+   * existing behavior. `machine` — and any kind added after it — exists only
+   * in the upgradeable v2 ACL, so it routes to `keyspace::grant_v2` and
+   * requires a v3+ armature_vault deployment; against older deployments the
+   * transaction fails at execution with an unresolved-function error.
+   * Pass `v2: true` to put a player/ou grant in the v2 store instead.
+   *
+   * With `autoMigrateAcl` on, this call also carries the migration prelude and
+   * every grant targets v2 — after the migration in the same PTB there is no
+   * v1 list left to add to. That takes precedence over `v2: false`, which would
+   * otherwise re-populate the store the migration just drained.
    */
   async grant(opts: {
     aclId: string
     keyspaceRole: KeyspaceRole
     principal: Principal
     ouId?: string
+    v2?: boolean
   }): Promise<{ epoch: number }> {
     const ouId = this.requireOuId(opts.ouId)
-    const tx = grantTx(
+    const { tx: baseTx, migrating } = this.beginMutation(opts.aclId, ouId)
+    const useV2 =
+      migrating ||
+      this.autoMigrateAcl ||
+      opts.v2 === true ||
+      opts.principal.type === 'machine'
+    const build = useV2 ? grantV2Tx : grantTx
+    const tx = build(
       this.packageId,
       opts.aclId,
       ouId,
       opts.keyspaceRole,
       opts.principal,
+      baseTx,
     )
     await this.requireExecutor()(tx)
+    if (migrating) this.migratedAcls.add(opts.aclId)
     const meta = await this.getAclMeta(opts.aclId)
     return { epoch: meta.epoch }
   }
@@ -263,30 +367,89 @@ export class AclClient {
   /**
    * Revoke `principal` from `keyspaceRole` on `aclId`.
    * Caller must hold the Grant role.
+   *
+   * A principal must be revoked from the store it was granted in, and
+   * `migrate_acl_to_v2` moves player/ou principals from v1 to v2 — so unless
+   * `v2` is given explicitly, this probes the v2 store (one extra read) and
+   * targets whichever store actually holds the principal. Machine principals
+   * skip the probe: they can only ever live in v2.
+   *
+   * With `autoMigrateAcl` on the probe is skipped entirely and the revoke
+   * always targets v2 — taking precedence over `v2`, since either this PTB's
+   * own prelude just moved the principal there or an earlier mutation already
+   * did. That also removes a read from the hot path.
    */
   async revoke(opts: {
     aclId: string
     keyspaceRole: KeyspaceRole
     principal: Principal
     ouId?: string
+    v2?: boolean
   }): Promise<{ epoch: number }> {
     const ouId = this.requireOuId(opts.ouId)
-    const tx = revokeTx(
+    const { tx: baseTx, migrating } = this.beginMutation(opts.aclId, ouId)
+    const useV2 = this.autoMigrateAcl
+      ? true
+      : (opts.v2 ??
+        (await this.holdsInV2(opts.aclId, opts.keyspaceRole, opts.principal)))
+    const build = useV2 ? revokeV2Tx : revokeTx
+    const tx = build(
       this.packageId,
       opts.aclId,
       ouId,
       opts.keyspaceRole,
       opts.principal,
+      baseTx,
     )
     await this.requireExecutor()(tx)
+    if (migrating) this.migratedAcls.add(opts.aclId)
     const meta = await this.getAclMeta(opts.aclId)
     return { epoch: meta.epoch }
   }
 
   /**
-   * Returns true if `address` holds Read access either directly as a player
-   * principal, or indirectly via an OU principal whose `ouId` is supplied.
-   * Pass `ouId` to check OU membership; omit to check player membership only.
+   * Lift this keyspace's v1 principals into the v2 store. Caller must hold
+   * Grant. Access-neutral and idempotent — but it empties the object's `acl`
+   * field, which SDKs older than this major read directly, so only migrate
+   * once your consumers are upgraded.
+   */
+  async migrateAclToV2(opts: {
+    aclId: string
+    ouId?: string
+  }): Promise<{ epoch: number }> {
+    const ouId = this.requireOuId(opts.ouId)
+    const tx = migrateAclToV2Tx(this.packageId, opts.aclId, ouId)
+    await this.requireExecutor()(tx)
+    // Nothing left for an auto-migration prelude to do on this keyspace.
+    this.migratedAcls.add(opts.aclId)
+    const meta = await this.getAclMeta(opts.aclId)
+    return { epoch: meta.epoch }
+  }
+
+  /** True when the v2 store holds this exact principal for `role`. */
+  private async holdsInV2(
+    aclId: string,
+    role: KeyspaceRole,
+    principal: Principal,
+  ): Promise<boolean> {
+    if (principal.type === 'machine') return true
+    const v2 = await fetchPrincipalRoleMapV2(this.suiClient, aclId)
+    const list =
+      role === 'Grant' ? v2.grant : role === 'Read' ? v2.read : v2.write
+    return list.some(
+      (p) =>
+        p.type === principal.type &&
+        (p.type === 'ou'
+          ? p.ouId === (principal as { ouId: string }).ouId
+          : p.address === (principal as { address: string }).address),
+    )
+  }
+
+  /**
+   * Returns true if `address` holds Read access either directly as a player or
+   * machine principal, or indirectly via an OU principal whose `ouId` is
+   * supplied. Pass `ouId` to check OU membership; omit to check direct
+   * (player/machine) membership only.
    */
   async hasAccess(opts: {
     aclId: string
@@ -296,7 +459,8 @@ export class AclClient {
     const acl = await this.getAcl(opts.aclId)
     return acl.readPrincipals.some(
       (p) =>
-        (p.type === 'player' && p.address === opts.address) ||
+        ((p.type === 'player' || p.type === 'machine') &&
+          p.address === opts.address) ||
         (p.type === 'ou' && opts.ouId !== undefined && p.ouId === opts.ouId),
     )
   }
@@ -345,14 +509,21 @@ export class AclClient {
 
     const uri = await this.requireStorageAdapter().upload(encrypted)
 
+    const { tx: baseTx, migrating } = await this.beginEntryMutation(
+      opts.aclId,
+      ouId,
+      opts.walletAddress,
+    )
     const tx = publishEntryTx(
       this.packageId,
       opts.aclId,
       ouId,
       uri,
       opts.description,
+      baseTx,
     )
     const result = await this.requireExecutor()(tx)
+    if (migrating) this.migratedAcls.add(opts.aclId)
 
     const entryChange = (result.objectChanges ?? []).find(
       (c) =>
@@ -430,8 +601,21 @@ export class AclClient {
 
     const uri = await this.requireStorageAdapter().upload(encrypted)
 
-    const tx = editEntryTx(this.packageId, opts.aclId, opts.entryId, ouId, uri)
+    const { tx: baseTx, migrating } = await this.beginEntryMutation(
+      opts.aclId,
+      ouId,
+      opts.walletAddress,
+    )
+    const tx = editEntryTx(
+      this.packageId,
+      opts.aclId,
+      opts.entryId,
+      ouId,
+      uri,
+      baseTx,
+    )
     await this.requireExecutor()(tx)
+    if (migrating) this.migratedAcls.add(opts.aclId)
 
     return { entryId: opts.entryId, uri, epoch: meta.epoch }
   }
@@ -480,14 +664,21 @@ export class AclClient {
 
     const newUri = await this.requireStorageAdapter().upload(encrypted)
 
+    const { tx: baseTx, migrating } = await this.beginEntryMutation(
+      opts.aclId,
+      ouId,
+      opts.walletAddress,
+    )
     const tx = updateEntryTx(
       this.packageId,
       opts.aclId,
       opts.entryId,
       ouId,
       newUri,
+      baseTx,
     )
     await this.requireExecutor()(tx)
+    if (migrating) this.migratedAcls.add(opts.aclId)
 
     return { newUri, epoch: meta.epoch }
   }
@@ -662,9 +853,10 @@ export class ReadOnlyAclClient {
   }
 
   /**
-   * Returns true if `address` holds Read access either directly as a player
-   * principal, or indirectly via an OU principal whose `ouId` is supplied.
-   * Pass `ouId` to check OU membership; omit to check player membership only.
+   * Returns true if `address` holds Read access either directly as a player or
+   * machine principal, or indirectly via an OU principal whose `ouId` is
+   * supplied. Pass `ouId` to check OU membership; omit to check direct
+   * (player/machine) membership only.
    */
   async hasAccess(opts: {
     aclId: string
@@ -674,7 +866,8 @@ export class ReadOnlyAclClient {
     const acl = await this.getAcl(opts.aclId)
     return acl.readPrincipals.some(
       (p) =>
-        (p.type === 'player' && p.address === opts.address) ||
+        ((p.type === 'player' || p.type === 'machine') &&
+          p.address === opts.address) ||
         (p.type === 'ou' && opts.ouId !== undefined && p.ouId === opts.ouId),
     )
   }

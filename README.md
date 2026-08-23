@@ -56,6 +56,15 @@ const aclClient = new AclClient({
     gateway: 'https://your-gateway.mypinata.cloud',
   }),
 
+  // Default OU (org) object id, used as the on-chain `&DAO` witness. Most
+  // grant/revoke/read/write calls need one; override it per method as needed.
+  ouId: OU_ID,
+
+  // Optional: migrate a keyspace to the v2 principal store on the next
+  // mutation. Requires an armature_vault v3+ deployment — see
+  // "Migrating a keyspace to the v2 store".
+  autoMigrateAcl: false,
+
   // Optional: REST indexer for getAccessibleAcls().
   // Defaults to the Trinary Exchange API (https://api.trinary.exchange).
   indexerUrl: INDEXER_URL,
@@ -118,46 +127,139 @@ executor: async (tx) => {
 
 ## Usage
 
-### Create an ACL
+### Create a keyspace
 
 ```ts
-const { aclId, adminCapId, epoch } = await aclClient.createAcl({ name: 'Guild Vault' });
-// Store aclId and adminCapId — you need both for role management.
+const { aclId, epoch } = await aclClient.createAcl({ name: 'Guild Vault' });
+// The creator is seeded into all three roles (Grant, Read, Write).
 ```
+
+Access is managed by the roles recorded on the keyspace itself — there is no
+capability object to hold or transfer. To create one owned by an org (OU)
+instead, so an indexer can map OU → keyspaces:
+
+```ts
+const { aclId } = await aclClient.createAclForOu({
+  name: 'Guild Vault',
+  ouId,
+  grantPrincipals: [{ type: 'ou', ouId }], // must be non-empty
+  readPrincipals: [],
+  writePrincipals: [],
+});
+```
+
+### Roles and principals
+
+A principal holds one or more of three roles: `Grant` (manage membership),
+`Read` (decrypt entries), and `Write` (publish/edit entries). A principal is a
+wallet (`player`), an org (`ou` — satisfied by any of its governance members),
+or a server-held key (`machine`, see below).
+
+Most operations pass an `ouId`, because the contract takes a live `&DAO`
+witness to evaluate `ou` principals. Set it once as `ouId` in the client config
+and override per method as needed; calls that need it and can't find one throw
+`ACL_OU_ID_REQUIRED`.
 
 ### Grant access
 
 ```ts
-await aclClient.addRole({
+await aclClient.grant({
   aclId,
-  adminCapId,
-  role: { type: 'address', address: '0xabc...' },
+  keyspaceRole: 'Read',
+  principal: { type: 'player', address: '0xabc...' },
+  ouId,
 });
 ```
 
 ### Revoke access
 
 ```ts
-await aclClient.removeRole({
+await aclClient.revoke({
   aclId,
-  adminCapId,
-  role: { type: 'address', address: '0xabc...' },
+  keyspaceRole: 'Read',
+  principal: { type: 'player', address: '0xabc...' },
+  ouId,
 });
-// After removeRole the ACL epoch increments. Existing entries become stale.
-// Call rotateAllStaleEntries() so the removed member loses read access to old data.
+// Revoking Read increments the keyspace epoch, so existing entries become
+// stale. Call rotateAllStaleEntries() to re-encrypt them, or the removed member
+// keeps read access to everything published before the change.
 ```
+
+The contract refuses to remove the last principal from any role, so a keyspace
+can't be locked out of its own management.
+
+### Machine principals and the v2 ACL
+
+A keyspace has two principal stores. The original one holds `player` and `ou`
+principals and can never gain a new kind — its on-chain type is an enum, and Sui
+upgrade compatibility freezes a published enum's variant set forever. The v2
+store is the upgradeable successor: it carries the kind as data, which is what
+makes `machine` principals (server-held keypairs, as opposed to human wallets)
+possible at all.
+
+Both stores are live at once. The contract checks both when authorizing, and
+reads merge them, so `getAcl()` returns one list per role and you normally never
+need to know which store a principal came from:
+
+```ts
+// Routed to the v2 store automatically — machine exists nowhere else.
+await aclClient.grant({
+  aclId,
+  keyspaceRole: 'Read',
+  principal: { type: 'machine', address: '0xabc...' },
+  ouId,
+})
+```
+
+Machine principals require an armature_vault v3+ deployment.
+
+### Migrating a keyspace to the v2 store
+
+Existing `player`/`ou` principals keep working indefinitely where they are, but
+you can lift them into the v2 store. Migration is access-neutral (each principal
+still admits exactly the same senders), idempotent, and deliberately does *not*
+bump the keyspace epoch — so it never marks entries stale or triggers a
+re-encryption sweep. Explicitly:
+
+```ts
+await aclClient.migrateAclToV2({ aclId, ouId }) // caller must hold Grant
+```
+
+Or set `autoMigrateAcl` and let it happen on the next change to a keyspace's
+ACL or entries. Mutations then prepend the migration to their own transaction,
+so it costs no extra signature and no separate migration pass:
+
+```ts
+const aclClient = new AclClient({ ...config, autoMigrateAcl: true })
+```
+
+Each keyspace migrates at most once per client. `grant`/`revoke` always carry
+it; entry writes carry it only when the acting wallet also holds `Grant`, since
+a writer who is not a grantor would otherwise abort the whole transaction.
+
+Two things to check before turning it on:
+
+- The network you point at must run armature_vault **v3+**. `migrate_acl_to_v2`
+  does not exist in earlier deployments, so every mutation would fail.
+- Every consumer reading these keyspaces should be on this SDK major. Migration
+  empties the object's v1 `acl` field, and an older SDK reads that field
+  directly — it would see no principals.
 
 ### Write encrypted data
 
 ```ts
-const { entryId, cid, epoch } = await aclClient.writeData({
+const { entryId, uri, epoch } = await aclClient.writeData({
   aclId,
   plaintext: 'The treasure is at 32°N, 117°W',
   description: 'Treasure coordinates',
   walletAddress: myAddress,
   signPersonalMessage,
+  ouId,
 });
 ```
+
+`uri` is whatever the storage adapter returned (e.g. `ipfs://<cid>`). Reads
+resolve it generically, so a reader doesn't need the same adapter that wrote it.
 
 `signPersonalMessage` must be an async function that signs a `Uint8Array` and returns the base64 signature string. In dapp-kit:
 
@@ -198,13 +300,15 @@ await aclClient.editData({
 
 ### Rotate stale entries after a membership change
 
-After any `addRole` or `removeRole`, existing entries are **stale** (encrypted under the old epoch). Rotate them so the new membership set applies:
+After any change to the **Read** role, existing entries are **stale** (encrypted
+under the old epoch). Rotate them so the new membership set applies:
 
 ```ts
 await aclClient.rotateAllStaleEntries({
   aclId,
   walletAddress: myAddress,
   signPersonalMessage,
+  ouId,
   onProgress: (done, total) => console.log(`${done}/${total}`),
 });
 ```
@@ -214,24 +318,33 @@ Or rotate one at a time:
 ```ts
 const stale = await aclClient.getStaleEntries(aclId);
 for (const entry of stale) {
-  await aclClient.rotateEntry({ aclId, entryId: entry.id, walletAddress, signPersonalMessage });
+  await aclClient.rotateEntry({ aclId, entryId: entry.id, walletAddress, signPersonalMessage, ouId });
 }
+
+// Or check a single entry without fetching the whole keyspace:
+const isStale = await aclClient.isEntryStale({ aclId, entryId });
 ```
+
+Migrating a keyspace to the v2 principal store does **not** bump the epoch, so
+it never triggers a rotation sweep.
 
 ### Check access
 
 ```ts
+// Direct (player/machine) access only.
 const allowed = await aclClient.hasAccess({ aclId, address: '0xabc...' });
+
+// Pass ouId to also count access held via an org principal.
+const allowedViaOrg = await aclClient.hasAccess({ aclId, address: '0xabc...', ouId });
 ```
 
-### Inspect ACL state
+### Inspect keyspace state
 
 ```ts
 const acl = await aclClient.getAcl(aclId);
-// acl.owner, acl.epoch, acl.roles[], acl.entries[]
-
-const caps = await aclClient.getOwnedAcls(myAddress);
-// AdminCap[] — ACLs this wallet can manage
+// acl.epoch, acl.entries[]
+// acl.grantPrincipals[], acl.readPrincipals[], acl.writePrincipals[]
+// acl.roles[] — deprecated alias for readPrincipals
 
 // Queries the indexer (defaults to https://api.trinary.exchange). Requires the
 // apiKey in config — see https://docs.trinary.exchange/docs/api-keys. Server-side
@@ -241,11 +354,23 @@ const accessible = await aclClient.getAccessibleAcls(myAddress);
 // string[] — all aclIds where myAddress has any role
 ```
 
-### Transfer the AdminCap
+Each role list is the **union of both principal stores**, so a `machine` granted
+in v2 and a `player` still in v1 appear side by side and callers never need to
+know which store a principal lives in.
+
+### Read-only clients
+
+If you only ever look up state — a read API, a UI's server route — construct a
+`ReadOnlyAclClient`. It needs just a `suiClient` (no `packageId`, `executor`,
+`storageAdapter`, or `sealClient`, since it never signs, uploads, or decrypts):
 
 ```ts
-await aclClient.transferAdminCap({ adminCapId, newOwner: multisigAddress });
-// Original owner loses write access. New owner gains it.
+import { ReadOnlyAclClient } from '@trinaryex/keyspace';
+
+const reader = new ReadOnlyAclClient({ suiClient, apiKey: TRINARY_API_KEY });
+await reader.getAcl(aclId);
+await reader.hasAccess({ aclId, address, ouId });
+await reader.getStaleEntries(aclId);
 ```
 
 ---
@@ -258,8 +383,9 @@ Implement `StorageAdapter` to use any blob backend:
 import type { StorageAdapter } from '@trinaryex/keyspace';
 
 class WalrusAdapter implements StorageAdapter {
+  // Returns the uri to record on-chain (any scheme your reader can resolve).
   async upload(data: Uint8Array): Promise<string> { /* ... */ }
-  async download(cid: string): Promise<Uint8Array> { /* ... */ }
+  async download(uri: string): Promise<Uint8Array> { /* ... */ }
 }
 ```
 
@@ -286,12 +412,19 @@ try {
 | Code | When |
 |---|---|
 | `ACL_ACCESS_DENIED` | Seal key servers rejected the decryption request |
-| `ACL_ENTRY_NOT_FOUND` | ACL or entry object ID does not exist |
+| `ACL_ENTRY_NOT_FOUND` | Keyspace or entry object ID does not exist |
 | `ACL_ALREADY_CURRENT_EPOCH` | `rotateEntry` called on a non-stale entry |
+| `ACL_EPOCH_MISMATCH` | Entry epoch doesn't match the keyspace's current epoch |
+| `ACL_ROLE_EXISTS` | Principal already holds the role being granted |
+| `ACL_ROLE_NOT_FOUND` | Principal doesn't hold the role being revoked |
+| `ACL_OU_ID_REQUIRED` | Operation needs an `ouId` and none was configured or passed |
+| `ACL_EXECUTOR_REQUIRED` | A mutation was called on a client built without an `executor` |
+| `ACL_STORAGE_ADAPTER_REQUIRED` | A write was called on a client built without a `storageAdapter` |
 | `ACL_INDEXER_REQUIRED` | `getAccessibleAcls` called with `indexerUrl` explicitly set to empty |
-| `ACL_NOT_IMPLEMENTED` | Tribe roles (require contract upgrade) |
+| `ACL_SESSION_KEY_EXPIRED` | Cached Seal session key outlived its TTL |
 | `ACL_STORAGE_UPLOAD_FAILED` | Pinata / storage backend rejected the upload |
-| `ACL_STORAGE_FETCH_FAILED` | CID could not be fetched from the gateway |
+| `ACL_STORAGE_FETCH_FAILED` | Blob could not be fetched from the gateway |
+| `ACL_VALIDATION_FAILED` | Invalid argument — e.g. a `machine` principal on a v1-only path |
 | `ACL_UNEXPECTED_RESPONSE` | Transaction result missing expected object changes |
 
 ---

@@ -19,6 +19,10 @@ export {
   DEFAULT_IPFS_GATEWAY,
 } from './storage'
 export { clearSessionCache } from './seal_helpers'
+export { keypairSigner } from './signers'
+export { PRINCIPAL_KIND } from './principals'
+export type { PrincipalKindName } from './principals'
+export type { PersonalMessageKeypair, KeypairSigner } from './signers'
 export {
   LocationsClient,
   LOCATIONS_SCHEMA_NAME,
@@ -27,6 +31,20 @@ export {
   TRANSPONDER_CODE_MAX_LENGTH,
   DESTINATION_UNKNOWN,
 } from './locations'
+export {
+  MachinesClient,
+  MACHINES_SCHEMA_NAME,
+  MACHINES_SCHEMA_VERSION,
+  MACHINES_ENTRY_DESCRIPTION,
+  MACHINE_LABEL_MAX_LENGTH,
+  MACHINE_NOTE_MAX_LENGTH,
+} from './machines'
+export type {
+  MachineRecord,
+  MachineRecordInput,
+  MachinesDocument,
+  MachinesClientConfig,
+} from './machines'
 export type {
   Principal,
   /** @deprecated Use Principal */
