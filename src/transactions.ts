@@ -2,6 +2,7 @@ import { Transaction } from '@mysten/sui/transactions'
 import { bcs } from '@mysten/bcs'
 import { fromHex } from '@mysten/sui/utils'
 import type { KeyspaceRole, Principal } from './types'
+import { AclClientError, AclError } from './errors'
 
 // ── BCS schemas for Move types ────────────────────────────────────────────────
 //
@@ -14,12 +15,13 @@ const RoleSchema = bcs.enum('Role', {
   Write: null,
 })
 
-// Variant order mirrors the Move enum — BCS encodes the ULEB128 variant index,
-// so Machine must stay last, matching armature_vault::acl::Principal.
+// Mirrors armature_vault::acl::Principal exactly. The on-chain enum's variant
+// set is FROZEN by Sui upgrade compatibility — machine principals are not a
+// variant here and never will be; they travel through keyspace::grant_machine
+// / revoke_machine as plain addresses (see grantMachineTx below).
 const PrincipalSchema = bcs.enum('Principal', {
   Player: bcs.struct('Player', { addr: bcs.bytes(32) }),
   Ou: bcs.struct('Ou', { dao_id: bcs.bytes(32) }),
-  Machine: bcs.struct('Machine', { addr: bcs.bytes(32) }),
 })
 
 function encodeRole(role: KeyspaceRole) {
@@ -46,9 +48,12 @@ function encodePrincipal(principal: Principal) {
         Ou: { dao_id: fromHex(principal.ouId) },
       })
     case 'machine':
-      return PrincipalSchema.serialize({
-        Machine: { addr: fromHex(principal.address) },
-      })
+      // The on-chain Principal enum is frozen — machines use the machine-ACL
+      // entry points instead (AclClient.grant/revoke route them there).
+      throw new AclClientError(
+        AclError.ValidationFailed,
+        'machine principals use grantMachineTx/revokeMachineTx, not the Principal enum',
+      )
     default:
       throw new Error(`Unknown Principal: ${principal satisfies never}`)
   }
@@ -72,10 +77,12 @@ function buildPrincipalArg(tx: Transaction, packageId: string, p: Principal) {
         arguments: [tx.pure.address(p.ouId)],
       })
     case 'machine':
-      return tx.moveCall({
-        target: `${packageId}::acl::machine`,
-        arguments: [tx.pure.address(p.address)],
-      })
+      // Machines cannot seed keyspace creation — grant after create via
+      // AclClient.grant (which routes to keyspace::grant_machine).
+      throw new AclClientError(
+        AclError.ValidationFailed,
+        'machine principals cannot be seeded at keyspace creation; grant them after create',
+      )
     default:
       throw new Error(`Unknown Principal: ${p satisfies never}`)
   }
@@ -147,6 +154,53 @@ export function grantTx(
       tx.object(keyspaceId),
       tx.pure(encodeRole(role)),
       tx.pure(encodePrincipal(principal)),
+      tx.object(ouId),
+    ],
+  })
+  return tx
+}
+
+/**
+ * `keyspace::grant_machine(keyspace, role, machine, dao)` — machine-ACL twin
+ * of `grant`. Machines are addresses in a versioned dynamic field on the
+ * Keyspace, not `Principal` enum values (the on-chain enum is frozen).
+ * Requires a v3+ armature_vault deployment.
+ */
+export function grantMachineTx(
+  packageId: string,
+  keyspaceId: string,
+  ouId: string,
+  role: KeyspaceRole,
+  machineAddress: string,
+): Transaction {
+  const tx = new Transaction()
+  tx.moveCall({
+    target: `${packageId}::keyspace::grant_machine`,
+    arguments: [
+      tx.object(keyspaceId),
+      tx.pure(encodeRole(role)),
+      tx.pure.address(machineAddress),
+      tx.object(ouId),
+    ],
+  })
+  return tx
+}
+
+/** `keyspace::revoke_machine(keyspace, role, machine, dao)` */
+export function revokeMachineTx(
+  packageId: string,
+  keyspaceId: string,
+  ouId: string,
+  role: KeyspaceRole,
+  machineAddress: string,
+): Transaction {
+  const tx = new Transaction()
+  tx.moveCall({
+    target: `${packageId}::keyspace::revoke_machine`,
+    arguments: [
+      tx.object(keyspaceId),
+      tx.pure(encodeRole(role)),
+      tx.pure.address(machineAddress),
       tx.object(ouId),
     ],
   })

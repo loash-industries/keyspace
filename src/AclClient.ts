@@ -19,8 +19,10 @@ import {
   createKeyspaceForOuTx,
   editDescriptionTx,
   editEntryTx,
+  grantMachineTx,
   grantTx,
   publishEntryTx,
+  revokeMachineTx,
   revokeTx,
   updateEntryTx,
 } from './transactions'
@@ -240,6 +242,11 @@ export class AclClient {
    * Grant `principal` the `keyspaceRole` on `aclId`.
    * Caller must already hold the Grant role.
    * `ouId` overrides the config-level default.
+   *
+   * Machine principals route to `keyspace::grant_machine` (the machine ACL
+   * lives outside the frozen on-chain Principal enum) — requires a v3+
+   * armature_vault deployment; against older deployments the transaction
+   * fails at execution with an unresolved-function error.
    */
   async grant(opts: {
     aclId: string
@@ -248,13 +255,22 @@ export class AclClient {
     ouId?: string
   }): Promise<{ epoch: number }> {
     const ouId = this.requireOuId(opts.ouId)
-    const tx = grantTx(
-      this.packageId,
-      opts.aclId,
-      ouId,
-      opts.keyspaceRole,
-      opts.principal,
-    )
+    const tx =
+      opts.principal.type === 'machine'
+        ? grantMachineTx(
+            this.packageId,
+            opts.aclId,
+            ouId,
+            opts.keyspaceRole,
+            opts.principal.address,
+          )
+        : grantTx(
+            this.packageId,
+            opts.aclId,
+            ouId,
+            opts.keyspaceRole,
+            opts.principal,
+          )
     await this.requireExecutor()(tx)
     const meta = await this.getAclMeta(opts.aclId)
     return { epoch: meta.epoch }
@@ -263,6 +279,7 @@ export class AclClient {
   /**
    * Revoke `principal` from `keyspaceRole` on `aclId`.
    * Caller must hold the Grant role.
+   * Machine principals route to `keyspace::revoke_machine` (see `grant`).
    */
   async revoke(opts: {
     aclId: string
@@ -271,13 +288,22 @@ export class AclClient {
     ouId?: string
   }): Promise<{ epoch: number }> {
     const ouId = this.requireOuId(opts.ouId)
-    const tx = revokeTx(
-      this.packageId,
-      opts.aclId,
-      ouId,
-      opts.keyspaceRole,
-      opts.principal,
-    )
+    const tx =
+      opts.principal.type === 'machine'
+        ? revokeMachineTx(
+            this.packageId,
+            opts.aclId,
+            ouId,
+            opts.keyspaceRole,
+            opts.principal.address,
+          )
+        : revokeTx(
+            this.packageId,
+            opts.aclId,
+            ouId,
+            opts.keyspaceRole,
+            opts.principal,
+          )
     await this.requireExecutor()(tx)
     const meta = await this.getAclMeta(opts.aclId)
     return { epoch: meta.epoch }

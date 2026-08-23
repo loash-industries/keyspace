@@ -1,7 +1,9 @@
 import {
   createKeyspaceTx,
   createKeyspaceForOuTx,
+  grantMachineTx,
   grantTx,
+  revokeMachineTx,
   revokeTx,
   publishEntryTx,
   updateEntryTx,
@@ -9,6 +11,7 @@ import {
   editDescriptionTx,
 } from '../src/transactions'
 import type { Principal } from '../src/types'
+import { AclClientError } from '../src/errors'
 
 const PKG = '0xdeadbeef'
 const ACL = '0x0000000000000000000000000000000000000000000000000000000000001001'
@@ -44,16 +47,35 @@ describe('transaction builders', () => {
     expect(typeof tx).toBe('object')
   })
 
-  it('grantTx returns a transaction object for machine principal', () => {
-    const tx = grantTx(PKG, ACL, OU, 'Read', machinePrincipal)
+  it('grantTx rejects machine principals — the on-chain enum is frozen', () => {
+    expect(() => grantTx(PKG, ACL, OU, 'Read', machinePrincipal)).toThrow(
+      AclClientError,
+    )
+  })
+
+  it('revokeTx rejects machine principals', () => {
+    expect(() => revokeTx(PKG, ACL, OU, 'Read', machinePrincipal)).toThrow(
+      AclClientError,
+    )
+  })
+
+  it('grantMachineTx returns a transaction object', () => {
+    const tx = grantMachineTx(PKG, ACL, OU, 'Read', ADDR)
     expect(tx).toBeTruthy()
     expect(typeof tx).toBe('object')
   })
 
-  it('revokeTx returns a transaction object for machine principal', () => {
-    const tx = revokeTx(PKG, ACL, OU, 'Read', machinePrincipal)
+  it('revokeMachineTx returns a transaction object', () => {
+    const tx = revokeMachineTx(PKG, ACL, OU, 'Read', ADDR)
     expect(tx).toBeTruthy()
     expect(typeof tx).toBe('object')
+  })
+
+  it('grantMachineTx works for all KeyspaceRole values', () => {
+    for (const role of ['Grant', 'Read', 'Write'] as const) {
+      const tx = grantMachineTx(PKG, ACL, OU, role, ADDR)
+      expect(tx).toBeTruthy()
+    }
   })
 
   it('grantTx works for all KeyspaceRole values', () => {
@@ -157,16 +179,17 @@ describe('createKeyspaceForOuTx', () => {
     expect(tx).toBeTruthy()
   })
 
-  it('encodes machine principals alongside player and ou in the same list', () => {
-    const tx = createKeyspaceForOuTx(
-      PKG,
-      OU,
-      'Mixed',
-      [ouPrincipal],
-      [playerPrincipal, machinePrincipal],
-      [],
-    )
-    expect(tx).toBeTruthy()
+  it('rejects machine principals at keyspace creation — grant after create instead', () => {
+    expect(() =>
+      createKeyspaceForOuTx(
+        PKG,
+        OU,
+        'Mixed',
+        [ouPrincipal],
+        [playerPrincipal, machinePrincipal],
+        [],
+      ),
+    ).toThrow(AclClientError)
   })
 
   it('returns a distinct transaction instance per call', () => {

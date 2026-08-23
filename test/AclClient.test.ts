@@ -343,6 +343,22 @@ describe('hasAccess', () => {
 // ── grant / revoke ────────────────────────────────────────────────────────────
 
 describe('grant', () => {
+  it('routes machine principals through the machine-ACL path and returns the new epoch', async () => {
+    const executor = makeExecutor()
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 7 }))
+    const client = makeClient({ executor })
+
+    const result = await client.grant({
+      aclId: ACL_ID,
+      keyspaceRole: 'Read',
+      principal: { type: 'machine', address: MEMBER },
+      ouId: OU_ID,
+    })
+
+    expect(executor).toHaveBeenCalledTimes(1)
+    expect(result.epoch).toBe(7)
+  })
+
   it('executes a transaction and returns the new epoch', async () => {
     const executor = makeExecutor()
     mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 4 }))

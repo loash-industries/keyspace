@@ -30,6 +30,13 @@ function makeSuiClient(overrides: Record<string, jest.Mock> = {}) {
         overrides.getObjects ??
         overrides.multiGetObjects ??
         (jest.fn() as jest.Mock),
+      // Machine-ACL lookups degrade to empty on any failure, so tests that
+      // don't care about machines get a rejecting default and still pass.
+      getDynamicFields:
+        overrides.getDynamicFields ??
+        ((jest.fn() as any).mockRejectedValue(
+          new Error('no dynamic fields in this mock'),
+        ) as jest.Mock),
     },
   }
 }
@@ -312,7 +319,88 @@ describe('fetchKeyspaceDetail', () => {
     expect(result!.grantPrincipals).toEqual([{ type: 'ou', ouId: OU_ID }])
   })
 
-  it('parses Machine principals in all three wire formats', async () => {
+  // ── Machine ACL (dynamic field) ─────────────────────────────────────────────
+
+  const FIELD_ID = '0xmachineaclfield'
+  const VERSIONED_ID = '0xversioned01'
+  const PAYLOAD_ID = '0xpayload01'
+
+  function machineAclClient(opts: { version?: number; readValue?: unknown[] }) {
+    const version = opts.version ?? 1
+    const readValue = opts.readValue ?? [MEMBER2]
+    return makeSuiClient({
+      getObject: (jest.fn() as any).mockImplementation(
+        async ({ objectId }: { objectId: string }) => {
+          if (objectId === ACL_ID) {
+            return moveObjectResponse(
+              ACL_ID,
+              makeKeyspaceFields({
+                acl: {
+                  contents: [
+                    { key: 'Read', value: [{ Player: { addr: MEMBER1 } }] },
+                  ],
+                },
+              }),
+            )
+          }
+          if (objectId === FIELD_ID) {
+            return moveObjectResponse(FIELD_ID, {
+              name: {},
+              value: { id: VERSIONED_ID, version },
+            })
+          }
+          if (objectId === PAYLOAD_ID) {
+            return moveObjectResponse(PAYLOAD_ID, {
+              name: version,
+              value: { acl: { contents: [{ key: 'Read', value: readValue }] } },
+            })
+          }
+          throw new Error(`unexpected object fetch: ${objectId}`)
+        },
+      ),
+      multiGetObjects: (jest.fn() as any).mockResolvedValue({ objects: [] }),
+      getDynamicFields: (jest.fn() as any).mockImplementation(
+        async ({ parentId }: { parentId: string }) => {
+          if (parentId === ACL_ID) {
+            return {
+              dynamicFields: [
+                {
+                  fieldId: FIELD_ID,
+                  name: { type: '0xpkg::keyspace::MachineAclKey' },
+                },
+              ],
+            }
+          }
+          if (parentId === VERSIONED_ID) {
+            return {
+              dynamicFields: [{ fieldId: PAYLOAD_ID, name: { type: 'u64' } }],
+            }
+          }
+          return { dynamicFields: [] }
+        },
+      ),
+    })
+  }
+
+  it('merges machine-ACL addresses into the role sets as machine principals', async () => {
+    const client = machineAclClient({})
+    const result = await fetchKeyspaceDetail(client, ACL_ID)
+    expect(result!.readPrincipals).toEqual([
+      { type: 'player', address: MEMBER1 },
+      { type: 'machine', address: MEMBER2 },
+    ])
+    expect(result!.roles).toEqual(result!.readPrincipals)
+  })
+
+  it('degrades to no machines when the stored schema version is unknown', async () => {
+    const client = machineAclClient({ version: 2 })
+    const result = await fetchKeyspaceDetail(client, ACL_ID)
+    expect(result!.readPrincipals).toEqual([
+      { type: 'player', address: MEMBER1 },
+    ])
+  })
+
+  it('degrades to no machines when the keyspace has no machine-ACL field', async () => {
     const client = makeSuiClient({
       getObject: (jest.fn() as any).mockResolvedValue(
         moveObjectResponse(
@@ -320,14 +408,33 @@ describe('fetchKeyspaceDetail', () => {
           makeKeyspaceFields({
             acl: {
               contents: [
-                {
-                  key: 'Read',
-                  value: [
-                    { Machine: { addr: MEMBER1 } },
-                    { '@variant': 'Machine', addr: MEMBER2 },
-                    { variant: 'Machine', fields: { addr: MEMBER1 } },
-                  ],
-                },
+                { key: 'Read', value: [{ Player: { addr: MEMBER1 } }] },
+              ],
+            },
+          }),
+        ),
+      ),
+      multiGetObjects: (jest.fn() as any).mockResolvedValue({ objects: [] }),
+      getDynamicFields: (jest.fn() as any).mockResolvedValue({
+        dynamicFields: [],
+      }),
+    })
+    const result = await fetchKeyspaceDetail(client, ACL_ID)
+    expect(result!.readPrincipals).toEqual([
+      { type: 'player', address: MEMBER1 },
+    ])
+  })
+
+  it('degrades to no machines when dynamic-field lookups fail entirely', async () => {
+    // makeSuiClient's default getDynamicFields rejects — the pre-v3 world.
+    const client = makeSuiClient({
+      getObject: (jest.fn() as any).mockResolvedValue(
+        moveObjectResponse(
+          ACL_ID,
+          makeKeyspaceFields({
+            acl: {
+              contents: [
+                { key: 'Read', value: [{ Player: { addr: MEMBER1 } }] },
               ],
             },
           }),
@@ -337,37 +444,8 @@ describe('fetchKeyspaceDetail', () => {
     })
     const result = await fetchKeyspaceDetail(client, ACL_ID)
     expect(result!.readPrincipals).toEqual([
-      { type: 'machine', address: MEMBER1 },
-      { type: 'machine', address: MEMBER2 },
-      { type: 'machine', address: MEMBER1 },
+      { type: 'player', address: MEMBER1 },
     ])
-  })
-
-  it('drops Machine principals that are missing their address field', async () => {
-    const client = makeSuiClient({
-      getObject: (jest.fn() as any).mockResolvedValue(
-        moveObjectResponse(
-          ACL_ID,
-          makeKeyspaceFields({
-            acl: {
-              contents: [
-                {
-                  key: 'Read',
-                  value: [
-                    { Machine: {} }, // no addr
-                    { '@variant': 'Machine' }, // no addr
-                    { variant: 'Machine', fields: {} }, // no addr
-                  ],
-                },
-              ],
-            },
-          }),
-        ),
-      ),
-      multiGetObjects: (jest.fn() as any).mockResolvedValue({ objects: [] }),
-    })
-    const result = await fetchKeyspaceDetail(client, ACL_ID)
-    expect(result!.readPrincipals).toEqual([])
   })
 
   it('drops @variant / variant principals that are missing their address fields', async () => {
