@@ -20,6 +20,8 @@ export {
 } from './storage'
 export { clearSessionCache } from './seal_helpers'
 export { keypairSigner } from './signers'
+export { PRINCIPAL_KIND } from './principals'
+export type { PrincipalKindName } from './principals'
 export type { PersonalMessageKeypair, KeypairSigner } from './signers'
 export {
   LocationsClient,

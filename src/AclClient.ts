@@ -19,11 +19,11 @@ import {
   createKeyspaceForOuTx,
   editDescriptionTx,
   editEntryTx,
-  grantMachineTx,
   grantTx,
+  grantV2Tx,
   publishEntryTx,
-  revokeMachineTx,
   revokeTx,
+  revokeV2Tx,
   updateEntryTx,
 } from './transactions'
 import {
@@ -243,34 +243,30 @@ export class AclClient {
    * Caller must already hold the Grant role.
    * `ouId` overrides the config-level default.
    *
-   * Machine principals route to `keyspace::grant_machine` (the machine ACL
-   * lives outside the frozen on-chain Principal enum) — requires a v3+
-   * armature_vault deployment; against older deployments the transaction
-   * fails at execution with an unresolved-function error.
+   * `player` and `ou` principals go to the original (v1) ACL, preserving
+   * existing behavior. `machine` — and any kind added after it — exists only
+   * in the upgradeable v2 ACL, so it routes to `keyspace::grant_v2` and
+   * requires a v3+ armature_vault deployment; against older deployments the
+   * transaction fails at execution with an unresolved-function error.
+   * Pass `v2: true` to put a player/ou grant in the v2 store instead.
    */
   async grant(opts: {
     aclId: string
     keyspaceRole: KeyspaceRole
     principal: Principal
     ouId?: string
+    v2?: boolean
   }): Promise<{ epoch: number }> {
     const ouId = this.requireOuId(opts.ouId)
-    const tx =
-      opts.principal.type === 'machine'
-        ? grantMachineTx(
-            this.packageId,
-            opts.aclId,
-            ouId,
-            opts.keyspaceRole,
-            opts.principal.address,
-          )
-        : grantTx(
-            this.packageId,
-            opts.aclId,
-            ouId,
-            opts.keyspaceRole,
-            opts.principal,
-          )
+    const useV2 = opts.v2 === true || opts.principal.type === 'machine'
+    const build = useV2 ? grantV2Tx : grantTx
+    const tx = build(
+      this.packageId,
+      opts.aclId,
+      ouId,
+      opts.keyspaceRole,
+      opts.principal,
+    )
     await this.requireExecutor()(tx)
     const meta = await this.getAclMeta(opts.aclId)
     return { epoch: meta.epoch }
@@ -279,31 +275,29 @@ export class AclClient {
   /**
    * Revoke `principal` from `keyspaceRole` on `aclId`.
    * Caller must hold the Grant role.
-   * Machine principals route to `keyspace::revoke_machine` (see `grant`).
+   *
+   * Routing mirrors `grant`: machine principals (and `v2: true`) target the
+   * v2 ACL, everything else the v1 ACL. A principal must be revoked from the
+   * store it was granted in — `getAcl` merges both, so pass `v2` to match how
+   * the grant was made when it wasn't the default.
    */
   async revoke(opts: {
     aclId: string
     keyspaceRole: KeyspaceRole
     principal: Principal
     ouId?: string
+    v2?: boolean
   }): Promise<{ epoch: number }> {
     const ouId = this.requireOuId(opts.ouId)
-    const tx =
-      opts.principal.type === 'machine'
-        ? revokeMachineTx(
-            this.packageId,
-            opts.aclId,
-            ouId,
-            opts.keyspaceRole,
-            opts.principal.address,
-          )
-        : revokeTx(
-            this.packageId,
-            opts.aclId,
-            ouId,
-            opts.keyspaceRole,
-            opts.principal,
-          )
+    const useV2 = opts.v2 === true || opts.principal.type === 'machine'
+    const build = useV2 ? revokeV2Tx : revokeTx
+    const tx = build(
+      this.packageId,
+      opts.aclId,
+      ouId,
+      opts.keyspaceRole,
+      opts.principal,
+    )
     await this.requireExecutor()(tx)
     const meta = await this.getAclMeta(opts.aclId)
     return { epoch: meta.epoch }

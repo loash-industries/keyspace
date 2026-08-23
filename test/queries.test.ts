@@ -319,15 +319,15 @@ describe('fetchKeyspaceDetail', () => {
     expect(result!.grantPrincipals).toEqual([{ type: 'ou', ouId: OU_ID }])
   })
 
-  // ── Machine ACL (dynamic field) ─────────────────────────────────────────────
+  // ── v2 principal ACL (dynamic field) ────────────────────────────────────────
 
-  const FIELD_ID = '0xmachineaclfield'
+  const FIELD_ID = '0xprincipalaclfield'
   const VERSIONED_ID = '0xversioned01'
   const PAYLOAD_ID = '0xpayload01'
 
-  function machineAclClient(opts: { version?: number; readValue?: unknown[] }) {
+  function v2AclClient(opts: { version?: number; readValue?: unknown[] }) {
     const version = opts.version ?? 1
-    const readValue = opts.readValue ?? [MEMBER2]
+    const readValue = opts.readValue ?? [{ kind: 2, id: MEMBER2, data: [] }]
     return makeSuiClient({
       getObject: (jest.fn() as any).mockImplementation(
         async ({ objectId }: { objectId: string }) => {
@@ -366,7 +366,7 @@ describe('fetchKeyspaceDetail', () => {
               dynamicFields: [
                 {
                   fieldId: FIELD_ID,
-                  name: { type: '0xpkg::keyspace::MachineAclKey' },
+                  name: { type: '0xpkg::keyspace::PrincipalAclKey' },
                 },
               ],
             }
@@ -382,8 +382,8 @@ describe('fetchKeyspaceDetail', () => {
     })
   }
 
-  it('merges machine-ACL addresses into the role sets as machine principals', async () => {
-    const client = machineAclClient({})
+  it('merges v2 principals into the role sets, union with the v1 store', async () => {
+    const client = v2AclClient({})
     const result = await fetchKeyspaceDetail(client, ACL_ID)
     expect(result!.readPrincipals).toEqual([
       { type: 'player', address: MEMBER1 },
@@ -392,15 +392,46 @@ describe('fetchKeyspaceDetail', () => {
     expect(result!.roles).toEqual(result!.readPrincipals)
   })
 
-  it('degrades to no machines when the stored schema version is unknown', async () => {
-    const client = machineAclClient({ version: 2 })
+  it('maps every known v2 kind back to its principal type', async () => {
+    const client = v2AclClient({
+      readValue: [
+        { kind: 0, id: MEMBER2, data: [] },
+        { kind: 1, id: OU_ID, data: [] },
+        { kind: 2, id: MEMBER2, data: [] },
+      ],
+    })
+    const result = await fetchKeyspaceDetail(client, ACL_ID)
+    expect(result!.readPrincipals).toEqual([
+      { type: 'player', address: MEMBER1 },
+      { type: 'player', address: MEMBER2 },
+      { type: 'ou', ouId: OU_ID },
+      { type: 'machine', address: MEMBER2 },
+    ])
+  })
+
+  it('drops v2 principals of a kind this SDK predates, keeping the rest', async () => {
+    const client = v2AclClient({
+      readValue: [
+        { kind: 2, id: MEMBER2, data: [] },
+        { kind: 200, id: MEMBER1, data: [] }, // future kind
+      ],
+    })
+    const result = await fetchKeyspaceDetail(client, ACL_ID)
+    expect(result!.readPrincipals).toEqual([
+      { type: 'player', address: MEMBER1 },
+      { type: 'machine', address: MEMBER2 },
+    ])
+  })
+
+  it('degrades to no v2 principals when the stored schema version is unknown', async () => {
+    const client = v2AclClient({ version: 2 })
     const result = await fetchKeyspaceDetail(client, ACL_ID)
     expect(result!.readPrincipals).toEqual([
       { type: 'player', address: MEMBER1 },
     ])
   })
 
-  it('degrades to no machines when the keyspace has no machine-ACL field', async () => {
+  it('degrades to no v2 principals when the keyspace has no v2 ACL field', async () => {
     const client = makeSuiClient({
       getObject: (jest.fn() as any).mockResolvedValue(
         moveObjectResponse(
@@ -425,7 +456,7 @@ describe('fetchKeyspaceDetail', () => {
     ])
   })
 
-  it('degrades to no machines when dynamic-field lookups fail entirely', async () => {
+  it('degrades to no v2 principals when dynamic-field lookups fail entirely', async () => {
     // makeSuiClient's default getDynamicFields rejects — the pre-v3 world.
     const client = makeSuiClient({
       getObject: (jest.fn() as any).mockResolvedValue(

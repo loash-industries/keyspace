@@ -3,6 +3,7 @@ import { bcs } from '@mysten/bcs'
 import { fromHex } from '@mysten/sui/utils'
 import type { KeyspaceRole, Principal } from './types'
 import { AclClientError, AclError } from './errors'
+import { principalId, principalKind } from './principals'
 
 // ── BCS schemas for Move types ────────────────────────────────────────────────
 //
@@ -15,14 +16,29 @@ const RoleSchema = bcs.enum('Role', {
   Write: null,
 })
 
-// Mirrors armature_vault::acl::Principal exactly. The on-chain enum's variant
-// set is FROZEN by Sui upgrade compatibility — machine principals are not a
-// variant here and never will be; they travel through keyspace::grant_machine
-// / revoke_machine as plain addresses (see grantMachineTx below).
+// armature_vault::acl::Principal (v1). The on-chain enum's variant set is
+// FROZEN by Sui upgrade compatibility, so this schema can never grow — new
+// principal kinds go through PrincipalV2Schema below.
 const PrincipalSchema = bcs.enum('Principal', {
   Player: bcs.struct('Player', { addr: bcs.bytes(32) }),
   Ou: bcs.struct('Ou', { dao_id: bcs.bytes(32) }),
 })
+
+// armature_vault::acl::PrincipalV2 — the upgradeable successor. A struct, not
+// an enum: the kind is a u8 tag, so new kinds need no schema change here.
+const PrincipalV2Schema = bcs.struct('PrincipalV2', {
+  kind: bcs.u8(),
+  id: bcs.bytes(32),
+  data: bcs.vector(bcs.u8()),
+})
+
+function encodePrincipalV2(principal: Principal) {
+  return PrincipalV2Schema.serialize({
+    kind: principalKind(principal),
+    id: fromHex(principalId(principal)),
+    data: [],
+  })
+}
 
 function encodeRole(role: KeyspaceRole) {
   switch (role) {
@@ -48,11 +64,11 @@ function encodePrincipal(principal: Principal) {
         Ou: { dao_id: fromHex(principal.ouId) },
       })
     case 'machine':
-      // The on-chain Principal enum is frozen — machines use the machine-ACL
-      // entry points instead (AclClient.grant/revoke route them there).
+      // The on-chain Principal enum is frozen and has no machine variant —
+      // machines are v2-only (AclClient.grant/revoke route them there).
       throw new AclClientError(
         AclError.ValidationFailed,
-        'machine principals use grantMachineTx/revokeMachineTx, not the Principal enum',
+        'machine principals require the v2 ACL — use grantV2Tx/revokeV2Tx',
       )
     default:
       throw new Error(`Unknown Principal: ${principal satisfies never}`)
@@ -77,8 +93,8 @@ function buildPrincipalArg(tx: Transaction, packageId: string, p: Principal) {
         arguments: [tx.pure.address(p.ouId)],
       })
     case 'machine':
-      // Machines cannot seed keyspace creation — grant after create via
-      // AclClient.grant (which routes to keyspace::grant_machine).
+      // Keyspace creation takes v1 principals only (its signature is frozen).
+      // Grant machines with grantV2Tx once the keyspace exists.
       throw new AclClientError(
         AclError.ValidationFailed,
         'machine principals cannot be seeded at keyspace creation; grant them after create',
@@ -161,46 +177,45 @@ export function grantTx(
 }
 
 /**
- * `keyspace::grant_machine(keyspace, role, machine, dao)` — machine-ACL twin
- * of `grant`. Machines are addresses in a versioned dynamic field on the
- * Keyspace, not `Principal` enum values (the on-chain enum is frozen).
- * Requires a v3+ armature_vault deployment.
+ * `keyspace::grant_v2(keyspace, role, principal, dao)` — grants into the
+ * upgradeable v2 principal ACL. Accepts every principal kind, including
+ * `machine`, which exists only here. Requires a v3+ armature_vault deployment.
  */
-export function grantMachineTx(
+export function grantV2Tx(
   packageId: string,
   keyspaceId: string,
   ouId: string,
   role: KeyspaceRole,
-  machineAddress: string,
+  principal: Principal,
 ): Transaction {
   const tx = new Transaction()
   tx.moveCall({
-    target: `${packageId}::keyspace::grant_machine`,
+    target: `${packageId}::keyspace::grant_v2`,
     arguments: [
       tx.object(keyspaceId),
       tx.pure(encodeRole(role)),
-      tx.pure.address(machineAddress),
+      tx.pure(encodePrincipalV2(principal)),
       tx.object(ouId),
     ],
   })
   return tx
 }
 
-/** `keyspace::revoke_machine(keyspace, role, machine, dao)` */
-export function revokeMachineTx(
+/** `keyspace::revoke_v2(keyspace, role, principal, dao)` */
+export function revokeV2Tx(
   packageId: string,
   keyspaceId: string,
   ouId: string,
   role: KeyspaceRole,
-  machineAddress: string,
+  principal: Principal,
 ): Transaction {
   const tx = new Transaction()
   tx.moveCall({
-    target: `${packageId}::keyspace::revoke_machine`,
+    target: `${packageId}::keyspace::revoke_v2`,
     arguments: [
       tx.object(keyspaceId),
       tx.pure(encodeRole(role)),
-      tx.pure.address(machineAddress),
+      tx.pure(encodePrincipalV2(principal)),
       tx.object(ouId),
     ],
   })

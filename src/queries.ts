@@ -1,5 +1,6 @@
 import type { AclDetail, AclMeta, EntryMeta, Principal } from './types'
 import { AclClientError, AclError } from './errors'
+import { principalFromV2 } from './principals'
 
 // ── Raw field shapes returned by Sui RPC ──────────────────────────────────────
 //
@@ -52,9 +53,9 @@ interface RawEncryptedEntryFields {
 //                { "variant": "Ou",    "fields": { "dao_id": "0x..." } }
 //   gRPC core:   { "@variant": "Player", "addr": "0x..." }   (fields inlined)
 //                { "@variant": "Ou",    "dao_id": "0x..." }
-// We support all three. Machine principals never appear here — the on-chain
-// Principal enum is frozen; machines live in the machine-ACL dynamic field
-// and are merged into the role sets by fetchMachineRoleMap below.
+// We support all three. This is the v1 enum only — it is frozen at Player/Ou,
+// so machine (and every later kind) arrives instead as a PrincipalV2 from the
+// v2 ACL, merged into the same role sets by fetchPrincipalRoleMapV2 below.
 
 function parsePrincipal(raw: unknown): Principal | null {
   if (!raw || typeof raw !== 'object') return null
@@ -157,31 +158,45 @@ function parseRoleMap(aclContents: RawAclEntry[]): {
   return { grantPrincipals, readPrincipals, writePrincipals }
 }
 
-// ── Machine ACL (dynamic field) ───────────────────────────────────────────────
+// ── v2 principal ACL (dynamic field) ──────────────────────────────────────────
 //
-// v3+ deployments store machine principals in a dynamic field on the Keyspace:
-// MachineAclKey → sui::versioned::Versioned → MachineAclV1 { acl: VecMap<Role,
-// vector<address>> }. Resolving them takes three hops: list the keyspace's
-// dynamic fields, read the Versioned wrapper, read its versioned payload.
+// v3+ deployments hold the upgradeable principal set in a dynamic field on the
+// Keyspace: PrincipalAclKey → sui::versioned::Versioned → PrincipalAclV1
+// { acl: VecMap<Role, vector<PrincipalV2>> }. Resolving it takes three hops:
+// list the keyspace's dynamic fields, read the Versioned wrapper, read its
+// versioned payload.
 //
-// This fetch DEGRADES, never throws: a pre-v3 contract, a keyspace with no
-// machine grants, an unknown (newer) payload version, or any RPC/shape error
-// all yield empty machine sets — the SDK then behaves exactly as it did before
-// machines existed. Upgrading the SDK is what reveals newer schema versions.
+// This fetch DEGRADES, never throws. A pre-v3 contract, a keyspace with no v2
+// grants, a payload schema version this SDK predates, or any RPC/shape error
+// all yield empty sets — the SDK then behaves exactly as it did before v2
+// existed. Within a known payload version, an unrecognized principal *kind* is
+// dropped the same way, matching the contract's own fail-closed `satisfies_v2`.
+// Upgrading the SDK is what reveals newer versions and kinds.
 
-const MACHINE_ACL_KEY_SUFFIX = '::keyspace::MachineAclKey'
-const KNOWN_MACHINE_ACL_VERSIONS = [1]
+const PRINCIPAL_ACL_KEY_SUFFIX = '::keyspace::PrincipalAclKey'
+const KNOWN_PRINCIPAL_ACL_VERSIONS = [1]
 
-interface MachineRoleMap {
-  grant: string[]
-  read: string[]
-  write: string[]
+interface PrincipalRoleMap {
+  grant: Principal[]
+  read: Principal[]
+  write: Principal[]
 }
 
-const EMPTY_MACHINE_ROLE_MAP: MachineRoleMap = {
+const EMPTY_PRINCIPAL_ROLE_MAP: PrincipalRoleMap = {
   grant: [],
   read: [],
   write: [],
+}
+
+/** Parse one on-chain PrincipalV2 struct; null for kinds this SDK predates. */
+function parsePrincipalV2(raw: unknown): Principal | null {
+  if (!raw || typeof raw !== 'object') return null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const p = ((raw as any)?.fields ?? raw) as Record<string, unknown>
+  const kind = Number(p.kind ?? NaN)
+  const id = p.id
+  if (!Number.isFinite(kind) || typeof id !== 'string') return null
+  return principalFromV2(kind, id)
 }
 
 function parseRoleKeyVariant(key: unknown): string | undefined {
@@ -221,38 +236,38 @@ async function fetchFieldJson(
 }
 
 /**
- * Fetch the machine ACL for a keyspace, keyed by role. Returns empty sets on
- * any failure or absence — see the module note above.
+ * Fetch the v2 principal ACL for a keyspace, keyed by role. Returns empty sets
+ * on any failure or absence — see the module note above.
  */
-export async function fetchMachineRoleMap(
+export async function fetchPrincipalRoleMapV2(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   suiClient: any,
   keyspaceId: string,
-): Promise<MachineRoleMap> {
+): Promise<PrincipalRoleMap> {
   try {
-    // Hop 1: find the MachineAclKey field among the keyspace's dynamic fields.
-    // Matched by type suffix so the (upgrade-specific) defining package id
-    // never needs to be known to the reader.
+    // Hop 1: find the PrincipalAclKey field among the keyspace's dynamic
+    // fields. Matched by type suffix so the (upgrade-specific) defining
+    // package id never needs to be known to the reader.
     const fields = await listDynamicFields(suiClient, keyspaceId)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const aclField = fields.find((f: any) => {
       const nameType = f?.name?.type ?? f?.type
       return (
         typeof nameType === 'string' &&
-        nameType.endsWith(MACHINE_ACL_KEY_SUFFIX)
+        nameType.endsWith(PRINCIPAL_ACL_KEY_SUFFIX)
       )
     })
-    if (!aclField) return EMPTY_MACHINE_ROLE_MAP
+    if (!aclField) return EMPTY_PRINCIPAL_ROLE_MAP
     const fieldId = aclField.fieldId ?? aclField.id ?? aclField.objectId
-    if (!fieldId) return EMPTY_MACHINE_ROLE_MAP
+    if (!fieldId) return EMPTY_PRINCIPAL_ROLE_MAP
 
     // Hop 2: the field's value is a Versioned wrapper { id, version }.
     const fieldJson = await fetchFieldJson(suiClient, fieldId)
     const versioned = fieldJson?.value ?? fieldJson
     const versionedId = versioned?.id?.id ?? versioned?.id
     const version = Number(versioned?.version ?? NaN)
-    if (!versionedId || !KNOWN_MACHINE_ACL_VERSIONS.includes(version)) {
-      return EMPTY_MACHINE_ROLE_MAP
+    if (!versionedId || !KNOWN_PRINCIPAL_ACL_VERSIONS.includes(version)) {
+      return EMPTY_PRINCIPAL_ROLE_MAP
     }
 
     // Hop 3: the Versioned payload is itself a dynamic field keyed by version.
@@ -260,36 +275,35 @@ export async function fetchMachineRoleMap(
     const payloadField = payloadFields[0]
     const payloadId =
       payloadField?.fieldId ?? payloadField?.id ?? payloadField?.objectId
-    if (!payloadId) return EMPTY_MACHINE_ROLE_MAP
+    if (!payloadId) return EMPTY_PRINCIPAL_ROLE_MAP
     const payloadJson = await fetchFieldJson(suiClient, payloadId)
     const payload = payloadJson?.value ?? payloadJson
 
-    // MachineAclV1: { acl: VecMap<Role, vector<address>> } — role keys arrive
-    // in the same three wire formats as the keyspace ACL's.
+    // PrincipalAclV1: { acl: VecMap<Role, vector<PrincipalV2>> } — role keys
+    // arrive in the same three wire formats as the v1 ACL's.
     const contents = unwrapAcl(payload?.acl)
-    const result: MachineRoleMap = { grant: [], read: [], write: [] }
+    const result: PrincipalRoleMap = { grant: [], read: [], write: [] }
     for (const rawEntry of contents) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const entry = ((rawEntry as any)?.fields ?? rawEntry) as {
         key?: unknown
         value?: unknown
       }
-      const addresses = (Array.isArray(entry.value) ? entry.value : []).filter(
-        (a): a is string => typeof a === 'string',
-      )
+      const principals = (
+        Array.isArray(entry.value) ? entry.value : []
+      ).flatMap((p) => {
+        const parsed = parsePrincipalV2(p)
+        return parsed ? [parsed] : []
+      })
       const roleVariant = parseRoleKeyVariant(entry.key)
-      if (roleVariant === 'Grant') result.grant = addresses
-      else if (roleVariant === 'Read') result.read = addresses
-      else if (roleVariant === 'Write') result.write = addresses
+      if (roleVariant === 'Grant') result.grant = principals
+      else if (roleVariant === 'Read') result.read = principals
+      else if (roleVariant === 'Write') result.write = principals
     }
     return result
   } catch {
-    return EMPTY_MACHINE_ROLE_MAP
+    return EMPTY_PRINCIPAL_ROLE_MAP
   }
-}
-
-function machinePrincipals(addresses: string[]): Principal[] {
-  return addresses.map((address) => ({ type: 'machine', address }))
 }
 
 // ── Queries ───────────────────────────────────────────────────────────────────
@@ -334,16 +348,17 @@ export async function fetchKeyspaceDetail(
   const { grantPrincipals, readPrincipals, writePrincipals } =
     parseRoleMap(aclContents)
 
-  const [entries, machines] = await Promise.all([
+  const [entries, v2] = await Promise.all([
     fetchEncryptedEntries(suiClient, entryIds, epoch),
-    fetchMachineRoleMap(suiClient, keyspaceId),
+    fetchPrincipalRoleMapV2(suiClient, keyspaceId),
   ])
 
-  // Machine principals merge into the same role sets as keyspace-level
-  // principals, so hasAccess and UI rendering treat them uniformly.
-  const mergedGrant = [...grantPrincipals, ...machinePrincipals(machines.grant)]
-  const mergedRead = [...readPrincipals, ...machinePrincipals(machines.read)]
-  const mergedWrite = [...writePrincipals, ...machinePrincipals(machines.write)]
+  // Both ACL stores are live at once on-chain (satisfies_role reads both), so
+  // a role's effective principal set is the union — consumers see one list and
+  // never need to know which store a principal came from.
+  const mergedGrant = [...grantPrincipals, ...v2.grant]
+  const mergedRead = [...readPrincipals, ...v2.read]
+  const mergedWrite = [...writePrincipals, ...v2.write]
 
   return {
     id: keyspaceId,

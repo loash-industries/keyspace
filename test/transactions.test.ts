@@ -1,10 +1,10 @@
 import {
   createKeyspaceTx,
   createKeyspaceForOuTx,
-  grantMachineTx,
   grantTx,
-  revokeMachineTx,
+  grantV2Tx,
   revokeTx,
+  revokeV2Tx,
   publishEntryTx,
   updateEntryTx,
   editEntryTx,
@@ -47,7 +47,7 @@ describe('transaction builders', () => {
     expect(typeof tx).toBe('object')
   })
 
-  it('grantTx rejects machine principals — the on-chain enum is frozen', () => {
+  it('grantTx rejects machine principals — the v1 enum has no machine variant', () => {
     expect(() => grantTx(PKG, ACL, OU, 'Read', machinePrincipal)).toThrow(
       AclClientError,
     )
@@ -59,21 +59,24 @@ describe('transaction builders', () => {
     )
   })
 
-  it('grantMachineTx returns a transaction object', () => {
-    const tx = grantMachineTx(PKG, ACL, OU, 'Read', ADDR)
-    expect(tx).toBeTruthy()
-    expect(typeof tx).toBe('object')
+  it('grantV2Tx accepts every principal kind', () => {
+    for (const principal of [playerPrincipal, ouPrincipal, machinePrincipal]) {
+      const tx = grantV2Tx(PKG, ACL, OU, 'Read', principal)
+      expect(tx).toBeTruthy()
+      expect(typeof tx).toBe('object')
+    }
   })
 
-  it('revokeMachineTx returns a transaction object', () => {
-    const tx = revokeMachineTx(PKG, ACL, OU, 'Read', ADDR)
-    expect(tx).toBeTruthy()
-    expect(typeof tx).toBe('object')
+  it('revokeV2Tx accepts every principal kind', () => {
+    for (const principal of [playerPrincipal, ouPrincipal, machinePrincipal]) {
+      const tx = revokeV2Tx(PKG, ACL, OU, 'Write', principal)
+      expect(tx).toBeTruthy()
+    }
   })
 
-  it('grantMachineTx works for all KeyspaceRole values', () => {
+  it('grantV2Tx works for all KeyspaceRole values', () => {
     for (const role of ['Grant', 'Read', 'Write'] as const) {
-      const tx = grantMachineTx(PKG, ACL, OU, role, ADDR)
+      const tx = grantV2Tx(PKG, ACL, OU, role, machinePrincipal)
       expect(tx).toBeTruthy()
     }
   })
