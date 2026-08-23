@@ -366,7 +366,7 @@ describe('fetchKeyspaceDetail', () => {
               dynamicFields: [
                 {
                   fieldId: FIELD_ID,
-                  name: { type: '0xpkg::keyspace::PrincipalAclKey' },
+                  name: { type: '0xpkg::principal_acl::PrincipalAclKey' },
                 },
               ],
             }

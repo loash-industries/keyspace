@@ -222,6 +222,25 @@ export function revokeV2Tx(
   return tx
 }
 
+/**
+ * `keyspace::migrate_acl_to_v2(keyspace, dao)` — lifts the keyspace's v1
+ * principals into the v2 store. Access-neutral and idempotent, but it empties
+ * the object's `acl` field, which SDKs older than this major read directly:
+ * migrate only once your consumers are upgraded.
+ */
+export function migrateAclToV2Tx(
+  packageId: string,
+  keyspaceId: string,
+  ouId: string,
+): Transaction {
+  const tx = new Transaction()
+  tx.moveCall({
+    target: `${packageId}::keyspace::migrate_acl_to_v2`,
+    arguments: [tx.object(keyspaceId), tx.object(ouId)],
+  })
+  return tx
+}
+
 /** `keyspace::revoke(keyspace, role, principal, dao)` */
 export function revokeTx(
   packageId: string,

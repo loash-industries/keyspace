@@ -173,7 +173,7 @@ function parseRoleMap(aclContents: RawAclEntry[]): {
 // dropped the same way, matching the contract's own fail-closed `satisfies_v2`.
 // Upgrading the SDK is what reveals newer versions and kinds.
 
-const PRINCIPAL_ACL_KEY_SUFFIX = '::keyspace::PrincipalAclKey'
+const PRINCIPAL_ACL_KEY_SUFFIX = '::principal_acl::PrincipalAclKey'
 const KNOWN_PRINCIPAL_ACL_VERSIONS = [1]
 
 interface PrincipalRoleMap {

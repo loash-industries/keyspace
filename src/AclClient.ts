@@ -21,6 +21,7 @@ import {
   editEntryTx,
   grantTx,
   grantV2Tx,
+  migrateAclToV2Tx,
   publishEntryTx,
   revokeTx,
   revokeV2Tx,
@@ -31,6 +32,7 @@ import {
   fetchEncryptedEntry,
   fetchKeyspaceDetail,
   fetchKeyspaceMeta,
+  fetchPrincipalRoleMapV2,
 } from './queries'
 import { sealDecrypt, sealEncrypt } from './seal_helpers'
 import { downloadBlob, DEFAULT_IPFS_GATEWAY } from './storage'
@@ -276,10 +278,11 @@ export class AclClient {
    * Revoke `principal` from `keyspaceRole` on `aclId`.
    * Caller must hold the Grant role.
    *
-   * Routing mirrors `grant`: machine principals (and `v2: true`) target the
-   * v2 ACL, everything else the v1 ACL. A principal must be revoked from the
-   * store it was granted in — `getAcl` merges both, so pass `v2` to match how
-   * the grant was made when it wasn't the default.
+   * A principal must be revoked from the store it was granted in, and
+   * `migrate_acl_to_v2` moves player/ou principals from v1 to v2 — so unless
+   * `v2` is given explicitly, this probes the v2 store (one extra read) and
+   * targets whichever store actually holds the principal. Machine principals
+   * skip the probe: they can only ever live in v2.
    */
   async revoke(opts: {
     aclId: string
@@ -289,7 +292,9 @@ export class AclClient {
     v2?: boolean
   }): Promise<{ epoch: number }> {
     const ouId = this.requireOuId(opts.ouId)
-    const useV2 = opts.v2 === true || opts.principal.type === 'machine'
+    const useV2 =
+      opts.v2 ??
+      (await this.holdsInV2(opts.aclId, opts.keyspaceRole, opts.principal))
     const build = useV2 ? revokeV2Tx : revokeTx
     const tx = build(
       this.packageId,
@@ -301,6 +306,42 @@ export class AclClient {
     await this.requireExecutor()(tx)
     const meta = await this.getAclMeta(opts.aclId)
     return { epoch: meta.epoch }
+  }
+
+  /**
+   * Lift this keyspace's v1 principals into the v2 store. Caller must hold
+   * Grant. Access-neutral and idempotent — but it empties the object's `acl`
+   * field, which SDKs older than this major read directly, so only migrate
+   * once your consumers are upgraded.
+   */
+  async migrateAclToV2(opts: {
+    aclId: string
+    ouId?: string
+  }): Promise<{ epoch: number }> {
+    const ouId = this.requireOuId(opts.ouId)
+    const tx = migrateAclToV2Tx(this.packageId, opts.aclId, ouId)
+    await this.requireExecutor()(tx)
+    const meta = await this.getAclMeta(opts.aclId)
+    return { epoch: meta.epoch }
+  }
+
+  /** True when the v2 store holds this exact principal for `role`. */
+  private async holdsInV2(
+    aclId: string,
+    role: KeyspaceRole,
+    principal: Principal,
+  ): Promise<boolean> {
+    if (principal.type === 'machine') return true
+    const v2 = await fetchPrincipalRoleMapV2(this.suiClient, aclId)
+    const list =
+      role === 'Grant' ? v2.grant : role === 'Read' ? v2.read : v2.write
+    return list.some(
+      (p) =>
+        p.type === principal.type &&
+        (p.type === 'ou'
+          ? p.ouId === (principal as { ouId: string }).ouId
+          : p.address === (principal as { address: string }).address),
+    )
   }
 
   /**

@@ -14,6 +14,7 @@ const mockFetchKeyspaceMeta = jest.fn() as any
 const mockFetchKeyspaceDetail = jest.fn() as any
 const mockFetchEncryptedEntry = jest.fn() as any
 const mockFetchAccessibleKeyspaces = jest.fn() as any
+const mockFetchPrincipalRoleMapV2 = jest.fn() as any
 const mockSealEncrypt = jest.fn() as any
 const mockSealDecrypt = jest.fn() as any
 const mockDownloadBlob = jest.fn() as any
@@ -25,6 +26,7 @@ jest.unstable_mockModule('../src/queries', () => ({
   fetchKeyspaceDetail: mockFetchKeyspaceDetail,
   fetchEncryptedEntry: mockFetchEncryptedEntry,
   fetchAccessibleKeyspaces: mockFetchAccessibleKeyspaces,
+  fetchPrincipalRoleMapV2: mockFetchPrincipalRoleMapV2,
 }))
 
 jest.unstable_mockModule('../src/seal_helpers', () => ({
@@ -142,6 +144,12 @@ beforeEach(() => {
   mockDownloadBlob.mockRejectedValue(
     new AclClientError(AclError.StorageFetchFailed, 'generic download off'),
   )
+  // Default: nothing in the v2 store, so revoke's store probe resolves to v1.
+  mockFetchPrincipalRoleMapV2.mockResolvedValue({
+    grant: [],
+    read: [],
+    write: [],
+  })
 })
 
 // ── getAcl ────────────────────────────────────────────────────────────────────
@@ -340,6 +348,78 @@ describe('hasAccess', () => {
   })
 })
 
+// ── revoke store routing ──────────────────────────────────────────────────────
+
+describe('revoke store routing', () => {
+  it('probes the v2 store and targets it when the principal has migrated', async () => {
+    const executor = makeExecutor()
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 2 }))
+    mockFetchPrincipalRoleMapV2.mockResolvedValue({
+      grant: [],
+      read: [{ type: 'player', address: MEMBER }],
+      write: [],
+    })
+    const client = makeClient({ executor })
+
+    await client.revoke({
+      aclId: ACL_ID,
+      keyspaceRole: 'Read',
+      principal: { type: 'player', address: MEMBER },
+      ouId: OU_ID,
+    })
+
+    expect(mockFetchPrincipalRoleMapV2).toHaveBeenCalledTimes(1)
+    expect(executor).toHaveBeenCalledTimes(1)
+  })
+
+  it('falls back to the v1 store when the v2 store does not hold it', async () => {
+    const executor = makeExecutor()
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 2 }))
+    const client = makeClient({ executor })
+
+    await client.revoke({
+      aclId: ACL_ID,
+      keyspaceRole: 'Read',
+      principal: { type: 'player', address: MEMBER },
+      ouId: OU_ID,
+    })
+
+    expect(mockFetchPrincipalRoleMapV2).toHaveBeenCalledTimes(1)
+    expect(executor).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips the probe for machine principals — they only live in v2', async () => {
+    const executor = makeExecutor()
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 2 }))
+    const client = makeClient({ executor })
+
+    await client.revoke({
+      aclId: ACL_ID,
+      keyspaceRole: 'Read',
+      principal: { type: 'machine', address: MEMBER },
+      ouId: OU_ID,
+    })
+
+    expect(mockFetchPrincipalRoleMapV2).not.toHaveBeenCalled()
+  })
+
+  it('skips the probe when v2 is passed explicitly', async () => {
+    const executor = makeExecutor()
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 2 }))
+    const client = makeClient({ executor })
+
+    await client.revoke({
+      aclId: ACL_ID,
+      keyspaceRole: 'Read',
+      principal: { type: 'player', address: MEMBER },
+      ouId: OU_ID,
+      v2: false,
+    })
+
+    expect(mockFetchPrincipalRoleMapV2).not.toHaveBeenCalled()
+  })
+})
+
 // ── grant / revoke ────────────────────────────────────────────────────────────
 
 describe('grant', () => {
@@ -357,6 +437,17 @@ describe('grant', () => {
 
     expect(executor).toHaveBeenCalledTimes(1)
     expect(result.epoch).toBe(7)
+  })
+
+  it('migrateAclToV2 executes a transaction and returns the epoch', async () => {
+    const executor = makeExecutor()
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 5 }))
+    const client = makeClient({ executor })
+
+    const result = await client.migrateAclToV2({ aclId: ACL_ID, ouId: OU_ID })
+
+    expect(executor).toHaveBeenCalledTimes(1)
+    expect(result.epoch).toBe(5)
   })
 
   it('accepts v2: true for a player principal', async () => {
