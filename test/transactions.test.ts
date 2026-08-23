@@ -23,6 +23,7 @@ const ouPrincipal: Principal = {
   type: 'ou',
   ouId: '0x0000000000000000000000000000000000000000000000000000000000002001',
 }
+const machinePrincipal: Principal = { type: 'machine', address: ADDR }
 
 describe('transaction builders', () => {
   it('createKeyspaceTx returns a transaction object', () => {
@@ -39,6 +40,18 @@ describe('transaction builders', () => {
 
   it('grantTx returns a transaction object for ou principal', () => {
     const tx = grantTx(PKG, ACL, OU, 'Grant', ouPrincipal)
+    expect(tx).toBeTruthy()
+    expect(typeof tx).toBe('object')
+  })
+
+  it('grantTx returns a transaction object for machine principal', () => {
+    const tx = grantTx(PKG, ACL, OU, 'Read', machinePrincipal)
+    expect(tx).toBeTruthy()
+    expect(typeof tx).toBe('object')
+  })
+
+  it('revokeTx returns a transaction object for machine principal', () => {
+    const tx = revokeTx(PKG, ACL, OU, 'Read', machinePrincipal)
     expect(tx).toBeTruthy()
     expect(typeof tx).toBe('object')
   })
@@ -139,6 +152,18 @@ describe('createKeyspaceForOuTx', () => {
       'Mixed',
       [playerPrincipal, ouPrincipal],
       [],
+      [],
+    )
+    expect(tx).toBeTruthy()
+  })
+
+  it('encodes machine principals alongside player and ou in the same list', () => {
+    const tx = createKeyspaceForOuTx(
+      PKG,
+      OU,
+      'Mixed',
+      [ouPrincipal],
+      [playerPrincipal, machinePrincipal],
       [],
     )
     expect(tx).toBeTruthy()

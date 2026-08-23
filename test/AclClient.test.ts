@@ -279,6 +279,32 @@ describe('hasAccess', () => {
     )
   })
 
+  it('returns true for a machine in readPrincipals', async () => {
+    mockFetchKeyspaceDetail.mockResolvedValue(
+      makeAclDetail({
+        readPrincipals: [{ type: 'machine', address: MEMBER }],
+        roles: [],
+      }),
+    )
+    const client = makeClient()
+    expect(await client.hasAccess({ aclId: ACL_ID, address: MEMBER })).toBe(
+      true,
+    )
+  })
+
+  it('does not match a machine principal against a different address', async () => {
+    mockFetchKeyspaceDetail.mockResolvedValue(
+      makeAclDetail({
+        readPrincipals: [{ type: 'machine', address: MEMBER }],
+        roles: [],
+      }),
+    )
+    const client = makeClient()
+    expect(
+      await client.hasAccess({ aclId: ACL_ID, address: '0xstranger' }),
+    ).toBe(false)
+  })
+
   it('returns true for an OU principal when matching ouId is provided', async () => {
     mockFetchKeyspaceDetail.mockResolvedValue(
       makeAclDetail({

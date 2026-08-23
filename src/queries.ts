@@ -52,7 +52,8 @@ interface RawEncryptedEntryFields {
 //                { "variant": "Ou",    "fields": { "dao_id": "0x..." } }
 //   gRPC core:   { "@variant": "Player", "addr": "0x..." }   (fields inlined)
 //                { "@variant": "Ou",    "dao_id": "0x..." }
-// We support all three.
+// We support all three. Machine follows Player's shape with the same `addr`
+// field ({ "Machine": { "addr": ... } } etc.).
 
 function parsePrincipal(raw: unknown): Principal | null {
   if (!raw || typeof raw !== 'object') return null
@@ -71,8 +72,14 @@ function parsePrincipal(raw: unknown): Principal | null {
     if (!ouId) return null
     return { type: 'ou', ouId }
   }
+  if ('Machine' in obj) {
+    const machine = obj['Machine'] as Record<string, unknown>
+    const addr = machine?.addr as string | undefined
+    if (!addr) return null
+    return { type: 'machine', address: addr }
+  }
 
-  // gRPC core-json format: { "@variant": "Player"|"Ou", ...inlined fields }
+  // gRPC core-json format: { "@variant": "Player"|"Ou"|"Machine", ...inlined fields }
   const atVariant =
     typeof obj['@variant'] === 'string' ? (obj['@variant'] as string) : null
   if (atVariant === 'Player') {
@@ -84,6 +91,11 @@ function parsePrincipal(raw: unknown): Principal | null {
     const ouId = obj.dao_id as string | undefined
     if (!ouId) return null
     return { type: 'ou', ouId }
+  }
+  if (atVariant === 'Machine') {
+    const addr = obj.addr as string | undefined
+    if (!addr) return null
+    return { type: 'machine', address: addr }
   }
 
   // Raw JSON-RPC { variant, fields } format
@@ -98,6 +110,11 @@ function parsePrincipal(raw: unknown): Principal | null {
     const ouId = fields.dao_id as string | undefined
     if (!ouId) return null
     return { type: 'ou', ouId }
+  }
+  if (variant === 'Machine') {
+    const addr = fields.addr as string | undefined
+    if (!addr) return null
+    return { type: 'machine', address: addr }
   }
 
   return null

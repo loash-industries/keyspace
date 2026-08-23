@@ -1,11 +1,18 @@
 import type { Transaction } from '@mysten/sui/transactions'
 
 // ── Principal ─────────────────────────────────────────────────────────────────
-// Mirrors armature_vault::acl::Principal
+// Mirrors armature_vault::acl::Principal. Variant order follows the Move enum
+// (Player, Ou, Machine) — BCS encodes by variant index, so new variants are
+// append-only there and must be appended in PrincipalSchema too.
+//
+// 'machine' is a server-held machine key's address: same authorization rule as
+// 'player' (addr == sender), but typed so indexers and UIs can tell machine
+// access apart from human access.
 
 export type Principal =
   | { type: 'player'; address: string }
   | { type: 'ou'; ouId: string }
+  | { type: 'machine'; address: string }
 
 /** @deprecated Use Principal */
 export type Role = Principal

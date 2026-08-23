@@ -312,6 +312,64 @@ describe('fetchKeyspaceDetail', () => {
     expect(result!.grantPrincipals).toEqual([{ type: 'ou', ouId: OU_ID }])
   })
 
+  it('parses Machine principals in all three wire formats', async () => {
+    const client = makeSuiClient({
+      getObject: (jest.fn() as any).mockResolvedValue(
+        moveObjectResponse(
+          ACL_ID,
+          makeKeyspaceFields({
+            acl: {
+              contents: [
+                {
+                  key: 'Read',
+                  value: [
+                    { Machine: { addr: MEMBER1 } },
+                    { '@variant': 'Machine', addr: MEMBER2 },
+                    { variant: 'Machine', fields: { addr: MEMBER1 } },
+                  ],
+                },
+              ],
+            },
+          }),
+        ),
+      ),
+      multiGetObjects: (jest.fn() as any).mockResolvedValue({ objects: [] }),
+    })
+    const result = await fetchKeyspaceDetail(client, ACL_ID)
+    expect(result!.readPrincipals).toEqual([
+      { type: 'machine', address: MEMBER1 },
+      { type: 'machine', address: MEMBER2 },
+      { type: 'machine', address: MEMBER1 },
+    ])
+  })
+
+  it('drops Machine principals that are missing their address field', async () => {
+    const client = makeSuiClient({
+      getObject: (jest.fn() as any).mockResolvedValue(
+        moveObjectResponse(
+          ACL_ID,
+          makeKeyspaceFields({
+            acl: {
+              contents: [
+                {
+                  key: 'Read',
+                  value: [
+                    { Machine: {} }, // no addr
+                    { '@variant': 'Machine' }, // no addr
+                    { variant: 'Machine', fields: {} }, // no addr
+                  ],
+                },
+              ],
+            },
+          }),
+        ),
+      ),
+      multiGetObjects: (jest.fn() as any).mockResolvedValue({ objects: [] }),
+    })
+    const result = await fetchKeyspaceDetail(client, ACL_ID)
+    expect(result!.readPrincipals).toEqual([])
+  })
+
   it('drops @variant / variant principals that are missing their address fields', async () => {
     const client = makeSuiClient({
       getObject: (jest.fn() as any).mockResolvedValue(

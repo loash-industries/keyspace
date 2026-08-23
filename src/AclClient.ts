@@ -284,9 +284,10 @@ export class AclClient {
   }
 
   /**
-   * Returns true if `address` holds Read access either directly as a player
-   * principal, or indirectly via an OU principal whose `ouId` is supplied.
-   * Pass `ouId` to check OU membership; omit to check player membership only.
+   * Returns true if `address` holds Read access either directly as a player or
+   * machine principal, or indirectly via an OU principal whose `ouId` is
+   * supplied. Pass `ouId` to check OU membership; omit to check direct
+   * (player/machine) membership only.
    */
   async hasAccess(opts: {
     aclId: string
@@ -296,7 +297,8 @@ export class AclClient {
     const acl = await this.getAcl(opts.aclId)
     return acl.readPrincipals.some(
       (p) =>
-        (p.type === 'player' && p.address === opts.address) ||
+        ((p.type === 'player' || p.type === 'machine') &&
+          p.address === opts.address) ||
         (p.type === 'ou' && opts.ouId !== undefined && p.ouId === opts.ouId),
     )
   }
@@ -662,9 +664,10 @@ export class ReadOnlyAclClient {
   }
 
   /**
-   * Returns true if `address` holds Read access either directly as a player
-   * principal, or indirectly via an OU principal whose `ouId` is supplied.
-   * Pass `ouId` to check OU membership; omit to check player membership only.
+   * Returns true if `address` holds Read access either directly as a player or
+   * machine principal, or indirectly via an OU principal whose `ouId` is
+   * supplied. Pass `ouId` to check OU membership; omit to check direct
+   * (player/machine) membership only.
    */
   async hasAccess(opts: {
     aclId: string
@@ -674,7 +677,8 @@ export class ReadOnlyAclClient {
     const acl = await this.getAcl(opts.aclId)
     return acl.readPrincipals.some(
       (p) =>
-        (p.type === 'player' && p.address === opts.address) ||
+        ((p.type === 'player' || p.type === 'machine') &&
+          p.address === opts.address) ||
         (p.type === 'ou' && opts.ouId !== undefined && p.ouId === opts.ouId),
     )
   }

@@ -14,9 +14,12 @@ const RoleSchema = bcs.enum('Role', {
   Write: null,
 })
 
+// Variant order mirrors the Move enum — BCS encodes the ULEB128 variant index,
+// so Machine must stay last, matching armature_vault::acl::Principal.
 const PrincipalSchema = bcs.enum('Principal', {
   Player: bcs.struct('Player', { addr: bcs.bytes(32) }),
   Ou: bcs.struct('Ou', { dao_id: bcs.bytes(32) }),
+  Machine: bcs.struct('Machine', { addr: bcs.bytes(32) }),
 })
 
 function encodeRole(role: KeyspaceRole) {
@@ -33,14 +36,22 @@ function encodeRole(role: KeyspaceRole) {
 }
 
 function encodePrincipal(principal: Principal) {
-  if (principal.type === 'player') {
-    return PrincipalSchema.serialize({
-      Player: { addr: fromHex(principal.address) },
-    })
+  switch (principal.type) {
+    case 'player':
+      return PrincipalSchema.serialize({
+        Player: { addr: fromHex(principal.address) },
+      })
+    case 'ou':
+      return PrincipalSchema.serialize({
+        Ou: { dao_id: fromHex(principal.ouId) },
+      })
+    case 'machine':
+      return PrincipalSchema.serialize({
+        Machine: { addr: fromHex(principal.address) },
+      })
+    default:
+      throw new Error(`Unknown Principal: ${principal satisfies never}`)
   }
-  return PrincipalSchema.serialize({
-    Ou: { dao_id: fromHex(principal.ouId) },
-  })
 }
 
 function textBytes(s: string): number[] {
@@ -48,17 +59,26 @@ function textBytes(s: string): number[] {
 }
 
 function buildPrincipalArg(tx: Transaction, packageId: string, p: Principal) {
-  if (p.type === 'player') {
-    return tx.moveCall({
-      target: `${packageId}::acl::player`,
-      arguments: [tx.pure.address(p.address)],
-    })
+  switch (p.type) {
+    case 'player':
+      return tx.moveCall({
+        target: `${packageId}::acl::player`,
+        arguments: [tx.pure.address(p.address)],
+      })
+    case 'ou':
+      // ID has the same 32-byte BCS encoding as address
+      return tx.moveCall({
+        target: `${packageId}::acl::ou`,
+        arguments: [tx.pure.address(p.ouId)],
+      })
+    case 'machine':
+      return tx.moveCall({
+        target: `${packageId}::acl::machine`,
+        arguments: [tx.pure.address(p.address)],
+      })
+    default:
+      throw new Error(`Unknown Principal: ${p satisfies never}`)
   }
-  // ID has the same 32-byte BCS encoding as address
-  return tx.moveCall({
-    target: `${packageId}::acl::ou`,
-    arguments: [tx.pure.address(p.ouId)],
-  })
 }
 
 // ── Transactions ──────────────────────────────────────────────────────────────
