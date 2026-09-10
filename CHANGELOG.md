@@ -1,3 +1,9 @@
+## <small>8.3.1 (2026-09-10)</small>
+
+* Merge pull request #19 from loash-industries/fix/accessible-keyspaces-endpoint ([99b7bdf](https://github.com/loash-industries/keyspace/commit/99b7bdf)), closes [#19](https://github.com/loash-industries/keyspace/issues/19)
+* fix(ci): grant the validate workflow the permissions its reusable job needs ([a47bc5b](https://github.com/loash-industries/keyspace/commit/a47bc5b))
+* fix(queries): call the real accessible-keyspaces endpoint ([0e5dc8e](https://github.com/loash-industries/keyspace/commit/0e5dc8e))
+
 ## 8.3.0 (2026-08-16)
 
 * Merge pull request #17 from loash-industries/feat/adapter-independent-blob-download ([d32e9f4](https://github.com/loash-industries/keyspace/commit/d32e9f4)), closes [#17](https://github.com/loash-industries/keyspace/issues/17)
