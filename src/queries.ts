@@ -273,21 +273,43 @@ async function fetchEncryptedEntries(
   })
 }
 
-// @todo:add-indexer — replace with GET ${indexerUrl}/v1/address/:address/keyspaces
+/**
+ * One entry of the indexer's accessible-keyspaces response.
+ *
+ * The endpoint returns a bare array of these — see the `AccessibleKeyspace`
+ * schema in the Trinary Exchange OpenAPI document. Only `acl_id` is used here;
+ * the rest is carried so the shape stays self-documenting at the call site.
+ */
+interface AccessibleKeyspace {
+  acl_id: string
+  name: string
+  roles: string[]
+  match_via: string
+  matched_org_id: string
+  registrant_org_id: string
+}
+
 export async function fetchAccessibleKeyspaces(
   indexerUrl: string,
   address: string,
   apiKey: string,
 ): Promise<string[]> {
-  const res = await fetch(`${indexerUrl}/v1/address/${address}/keyspaces`, {
-    headers: { 'x-api-key': apiKey },
-  })
+  const res = await fetch(
+    `${indexerUrl}/v1/players/${address}/accessible-keyspaces`,
+    { headers: { 'x-api-key': apiKey } },
+  )
   if (!res.ok) {
     throw new AclClientError(
       AclError.UnexpectedResponse,
       `Indexer error (${res.status}): ${res.statusText}`,
     )
   }
-  const { keyspaceIds } = (await res.json()) as { keyspaceIds: string[] }
-  return keyspaceIds
+  const keyspaces = (await res.json()) as AccessibleKeyspace[]
+  if (!Array.isArray(keyspaces)) {
+    throw new AclClientError(
+      AclError.UnexpectedResponse,
+      'Indexer returned a non-array body for accessible keyspaces.',
+    )
+  }
+  return keyspaces.map((keyspace) => keyspace.acl_id)
 }

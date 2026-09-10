@@ -550,17 +550,47 @@ describe('fetchAccessibleKeyspaces', () => {
     jest.restoreAllMocks()
   })
 
-  it('returns keyspaceIds from the indexer and sends the api key as the x-api-key header', async () => {
+  /** A response entry as the indexer actually serves it. */
+  const accessible = (aclId: string) => ({
+    acl_id: aclId,
+    name: 'awar members',
+    roles: ['read', 'write'],
+    match_via: 'created',
+    matched_org_id: '0xorg',
+    registrant_org_id: '0xorg',
+  })
+
+  it('maps acl_id out of the indexer response and sends the api key as the x-api-key header', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
-      json: async () => ({ keyspaceIds: ['0xacl1', '0xacl2'] }),
+      json: async () => [accessible('0xacl1'), accessible('0xacl2')],
     })
     const result = await fetchAccessibleKeyspaces(INDEXER, OWNER, 'sk-test-key')
     expect(result).toEqual(['0xacl1', '0xacl2'])
     expect(fetchMock).toHaveBeenCalledWith(
-      `${INDEXER}/v1/address/${OWNER}/keyspaces`,
+      `${INDEXER}/v1/players/${OWNER}/accessible-keyspaces`,
       { headers: { 'x-api-key': 'sk-test-key' } },
     )
+  })
+
+  it('returns an empty list when the player can access nothing', async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => [] })
+    await expect(
+      fetchAccessibleKeyspaces(INDEXER, OWNER, 'sk-test-key'),
+    ).resolves.toEqual([])
+  })
+
+  it('throws AclClientError(UnexpectedResponse) when the body is not an array', async () => {
+    // The previous implementation destructured `{ keyspaceIds }` from the body
+    // and silently resolved to undefined when that key was absent. Fail loudly
+    // instead — a shape change should surface, not propagate as undefined.
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ keyspaceIds: ['0xacl1'] }),
+    })
+    await expect(
+      fetchAccessibleKeyspaces(INDEXER, OWNER, 'sk-test-key'),
+    ).rejects.toMatchObject({ code: AclError.UnexpectedResponse })
   })
 
   it('throws AclClientError(UnexpectedResponse) on non-ok response', async () => {
