@@ -312,6 +312,44 @@ describe('fetchKeyspaceDetail', () => {
     expect(result!.grantPrincipals).toEqual([{ type: 'ou', ouId: OU_ID }])
   })
 
+  it('parses Machine principals and cycle-7 ou_id in all three formats', async () => {
+    const client = makeSuiClient({
+      getObject: (jest.fn() as any).mockResolvedValue(
+        moveObjectResponse(
+          ACL_ID,
+          makeKeyspaceFields({
+            acl: {
+              contents: [
+                {
+                  key: 'Read',
+                  value: [
+                    { Machine: { addr: MEMBER1 } },
+                    { '@variant': 'Machine', addr: MEMBER2 },
+                    { variant: 'Machine', fields: { addr: MEMBER1 } },
+                    { Ou: { ou_id: OU_ID } },
+                    { '@variant': 'Ou', ou_id: OU_ID },
+                    { variant: 'Ou', fields: { ou_id: OU_ID } },
+                    { '@variant': 'Machine' }, // no addr
+                  ],
+                },
+              ],
+            },
+          }),
+        ),
+      ),
+      multiGetObjects: (jest.fn() as any).mockResolvedValue({ objects: [] }),
+    })
+    const result = await fetchKeyspaceDetail(client, ACL_ID)
+    expect(result!.readPrincipals).toEqual([
+      { type: 'machine', address: MEMBER1 },
+      { type: 'machine', address: MEMBER2 },
+      { type: 'machine', address: MEMBER1 },
+      { type: 'ou', ouId: OU_ID },
+      { type: 'ou', ouId: OU_ID },
+      { type: 'ou', ouId: OU_ID },
+    ])
+  })
+
   it('drops @variant / variant principals that are missing their address fields', async () => {
     const client = makeSuiClient({
       getObject: (jest.fn() as any).mockResolvedValue(
