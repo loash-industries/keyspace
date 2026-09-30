@@ -44,7 +44,7 @@ const DEFAULT_INDEXER_URL = 'https://api.trinary.exchange'
  * any non-default deployment.
  */
 export const DEFAULT_PACKAGE_ID =
-  '0x3af6edb64f575cb65a89f1c8f445a2e2aad05324a1586aad9e2651191bf4f99b'
+  '0xf447556abd7a92cc8690d626e1dd85dd40510c4a4dd75dcb5671f88ddfaec87e'
 
 export class AclClient {
   private readonly suiClient: AclClientConfig['suiClient']
