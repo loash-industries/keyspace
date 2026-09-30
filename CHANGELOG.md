@@ -1,3 +1,7 @@
+## <small>9.0.1 (2026-09-30)</small>
+
+* fix: point DEFAULT_PACKAGE_ID at cycle-7 armature_vault ([46a7410](https://github.com/loash-industries/keyspace/commit/46a7410))
+
 ## 9.0.0 (2026-09-30)
 
 * feat!: support Machine principal and cycle-7 armature-vault (#20) ([a91b50d](https://github.com/loash-industries/keyspace/commit/a91b50d)), closes [#20](https://github.com/loash-industries/keyspace/issues/20)
