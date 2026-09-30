@@ -1,3 +1,11 @@
+## 9.0.0 (2026-09-30)
+
+* feat!: support Machine principal and cycle-7 armature-vault (#20) ([a91b50d](https://github.com/loash-industries/keyspace/commit/a91b50d)), closes [#20](https://github.com/loash-industries/keyspace/issues/20)
+
+### BREAKING CHANGE
+
+* support Machine principal and cycle-7 armature-vault (#20)
+
 ## <small>8.3.1 (2026-09-10)</small>
 
 * Merge pull request #19 from loash-industries/fix/accessible-keyspaces-endpoint ([99b7bdf](https://github.com/loash-industries/keyspace/commit/99b7bdf)), closes [#19](https://github.com/loash-industries/keyspace/issues/19)
