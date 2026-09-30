@@ -47,57 +47,61 @@ interface RawEncryptedEntryFields {
 // ── Principal parsing ─────────────────────────────────────────────────────────
 //
 // Sui clients return Move enum variants in three formats:
-//   Normalized:  { "Player": { "addr": "0x..." } }  /  { "Ou": { "dao_id": "0x..." } }
+//   Normalized:  { "Player": { "addr": "0x..." } }  /  { "Ou": { "ou_id": "0x..." } }
 //   Raw JSON-RPC:{ "variant": "Player", "fields": { "addr": "0x..." } }
-//                { "variant": "Ou",    "fields": { "dao_id": "0x..." } }
 //   gRPC core:   { "@variant": "Player", "addr": "0x..." }   (fields inlined)
-//                { "@variant": "Ou",    "dao_id": "0x..." }
-// We support all three.
+// We support all three. `Machine` has the same shape as `Player`. The `Ou`
+// field is `ou_id` since cycle 7; cycle-6 vaults used `dao_id`, still accepted.
+
+function principalFromVariant(
+  variant: string,
+  fields: Record<string, unknown> | undefined,
+): Principal | null {
+  if (!fields || typeof fields !== 'object') return null
+  switch (variant) {
+    case 'Player':
+    case 'Machine': {
+      const addr = fields.addr
+      if (typeof addr !== 'string' || !addr) return null
+      return variant === 'Player'
+        ? { type: 'player', address: addr }
+        : { type: 'machine', address: addr }
+    }
+    case 'Ou': {
+      const ouId = fields.ou_id ?? fields.dao_id
+      if (typeof ouId !== 'string' || !ouId) return null
+      return { type: 'ou', ouId }
+    }
+    default:
+      return null
+  }
+}
 
 function parsePrincipal(raw: unknown): Principal | null {
   if (!raw || typeof raw !== 'object') return null
   const obj = raw as Record<string, unknown>
 
-  // Normalized format
-  if ('Player' in obj) {
-    const player = obj['Player'] as Record<string, unknown>
-    const addr = player?.addr as string | undefined
-    if (!addr) return null
-    return { type: 'player', address: addr }
-  }
-  if ('Ou' in obj) {
-    const ou = obj['Ou'] as Record<string, unknown>
-    const ouId = ou?.dao_id as string | undefined
-    if (!ouId) return null
-    return { type: 'ou', ouId }
-  }
-
-  // gRPC core-json format: { "@variant": "Player"|"Ou", ...inlined fields }
-  const atVariant =
-    typeof obj['@variant'] === 'string' ? (obj['@variant'] as string) : null
-  if (atVariant === 'Player') {
-    const addr = obj.addr as string | undefined
-    if (!addr) return null
-    return { type: 'player', address: addr }
-  }
-  if (atVariant === 'Ou') {
-    const ouId = obj.dao_id as string | undefined
-    if (!ouId) return null
-    return { type: 'ou', ouId }
+  // gRPC core-json format: { "@variant": "Player"|"Machine"|"Ou", ...inlined fields }
+  if (typeof obj['@variant'] === 'string') {
+    return principalFromVariant(obj['@variant'], obj)
   }
 
   // Raw JSON-RPC { variant, fields } format
-  const variant = typeof obj.variant === 'string' ? obj.variant : null
-  const fields = (obj.fields ?? {}) as Record<string, unknown>
-  if (variant === 'Player') {
-    const addr = fields.addr as string | undefined
-    if (!addr) return null
-    return { type: 'player', address: addr }
+  if (typeof obj.variant === 'string') {
+    return principalFromVariant(
+      obj.variant,
+      (obj.fields ?? {}) as Record<string, unknown>,
+    )
   }
-  if (variant === 'Ou') {
-    const ouId = fields.dao_id as string | undefined
-    if (!ouId) return null
-    return { type: 'ou', ouId }
+
+  // Normalized format: { "Player": { ... } }
+  for (const variant of ['Player', 'Machine', 'Ou']) {
+    if (variant in obj) {
+      return principalFromVariant(
+        variant,
+        obj[variant] as Record<string, unknown> | undefined,
+      )
+    }
   }
 
   return null

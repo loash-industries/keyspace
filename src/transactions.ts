@@ -1,46 +1,23 @@
 import { Transaction } from '@mysten/sui/transactions'
-import { bcs } from '@mysten/bcs'
-import { fromHex } from '@mysten/sui/utils'
 import type { KeyspaceRole, Principal } from './types'
 
-// ── BCS schemas for Move types ────────────────────────────────────────────────
+// ── Move enum arguments ───────────────────────────────────────────────────────
 //
-// armature_vault::keyspace::Role  (enum, no-field variants)
-// armature_vault::acl::Principal  (enum with fields)
+// armature_vault::keyspace::Role and armature_vault::acl::Principal are Move 2
+// enums, which Sui's PTB validator does not accept as pure inputs. Build them
+// on-chain with their constructor functions instead.
 
-const RoleSchema = bcs.enum('Role', {
-  Grant: null,
-  Read: null,
-  Write: null,
-})
-
-const PrincipalSchema = bcs.enum('Principal', {
-  Player: bcs.struct('Player', { addr: bcs.bytes(32) }),
-  Ou: bcs.struct('Ou', { dao_id: bcs.bytes(32) }),
-})
-
-function encodeRole(role: KeyspaceRole) {
+function buildRoleArg(tx: Transaction, packageId: string, role: KeyspaceRole) {
   switch (role) {
     case 'Grant':
-      return RoleSchema.serialize({ Grant: null })
+      return tx.moveCall({ target: `${packageId}::keyspace::role_grant` })
     case 'Read':
-      return RoleSchema.serialize({ Read: null })
+      return tx.moveCall({ target: `${packageId}::keyspace::role_read` })
     case 'Write':
-      return RoleSchema.serialize({ Write: null })
+      return tx.moveCall({ target: `${packageId}::keyspace::role_write` })
     default:
       throw new Error(`Unknown KeyspaceRole: ${role satisfies never}`)
   }
-}
-
-function encodePrincipal(principal: Principal) {
-  if (principal.type === 'player') {
-    return PrincipalSchema.serialize({
-      Player: { addr: fromHex(principal.address) },
-    })
-  }
-  return PrincipalSchema.serialize({
-    Ou: { dao_id: fromHex(principal.ouId) },
-  })
 }
 
 function textBytes(s: string): number[] {
@@ -48,17 +25,28 @@ function textBytes(s: string): number[] {
 }
 
 function buildPrincipalArg(tx: Transaction, packageId: string, p: Principal) {
-  if (p.type === 'player') {
-    return tx.moveCall({
-      target: `${packageId}::acl::player`,
-      arguments: [tx.pure.address(p.address)],
-    })
+  switch (p.type) {
+    case 'player':
+      return tx.moveCall({
+        target: `${packageId}::acl::player`,
+        arguments: [tx.pure.address(p.address)],
+      })
+    case 'machine':
+      return tx.moveCall({
+        target: `${packageId}::acl::machine`,
+        arguments: [tx.pure.address(p.address)],
+      })
+    case 'ou':
+      // ID has the same 32-byte BCS encoding as address
+      return tx.moveCall({
+        target: `${packageId}::acl::ou`,
+        arguments: [tx.pure.address(p.ouId)],
+      })
+    default:
+      throw new Error(
+        `Unknown principal type: ${(p satisfies never as Principal).type}`,
+      )
   }
-  // ID has the same 32-byte BCS encoding as address
-  return tx.moveCall({
-    target: `${packageId}::acl::ou`,
-    arguments: [tx.pure.address(p.ouId)],
-  })
 }
 
 // ── Transactions ──────────────────────────────────────────────────────────────
@@ -74,10 +62,10 @@ export function createKeyspaceTx(packageId: string, name: string): Transaction {
 }
 
 /**
- * `keyspace::create_keyspace_for_dao(name, dao, grant, read, write)`
+ * `keyspace::create_keyspace_for_ou(name, org, grant, read, write)`
  *
  * The `ouId` is passed as an object reference (`tx.object`) so the Move VM
- * enforces the `&DAO` witness; the caller's governance membership and the
+ * enforces the `&OU` witness; the caller's governance membership and the
  * registrant OU ID are verified on-chain.
  */
 export function createKeyspaceForOuTx(
@@ -100,7 +88,7 @@ export function createKeyspaceForOuTx(
     })
 
   tx.moveCall({
-    target: `${packageId}::keyspace::create_keyspace_for_dao`,
+    target: `${packageId}::keyspace::create_keyspace_for_ou`,
     arguments: [
       tx.pure.vector('u8', textBytes(name)),
       tx.object(ouId),
@@ -125,8 +113,8 @@ export function grantTx(
     target: `${packageId}::keyspace::grant`,
     arguments: [
       tx.object(keyspaceId),
-      tx.pure(encodeRole(role)),
-      tx.pure(encodePrincipal(principal)),
+      buildRoleArg(tx, packageId, role),
+      buildPrincipalArg(tx, packageId, principal),
       tx.object(ouId),
     ],
   })
@@ -146,8 +134,8 @@ export function revokeTx(
     target: `${packageId}::keyspace::revoke`,
     arguments: [
       tx.object(keyspaceId),
-      tx.pure(encodeRole(role)),
-      tx.pure(encodePrincipal(principal)),
+      buildRoleArg(tx, packageId, role),
+      buildPrincipalArg(tx, packageId, principal),
       tx.object(ouId),
     ],
   })

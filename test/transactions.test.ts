@@ -19,6 +19,7 @@ const ADDR =
   '0x0000000000000000000000000000000000000000000000000000000000001004'
 
 const playerPrincipal: Principal = { type: 'player', address: ADDR }
+const machinePrincipal: Principal = { type: 'machine', address: ADDR }
 const ouPrincipal: Principal = {
   type: 'ou',
   ouId: '0x0000000000000000000000000000000000000000000000000000000000002001',
@@ -90,6 +91,53 @@ describe('transaction builders', () => {
     expect(() =>
       grantTx(PKG, ACL, OU, 'Unknown' as any, playerPrincipal),
     ).toThrow('Unknown KeyspaceRole: Unknown')
+  })
+})
+
+// Move calls in a built transaction, as `module::function`.
+function moveCalls(tx: ReturnType<typeof grantTx>): string[] {
+  return tx
+    .getData()
+    .commands.flatMap((c) =>
+      c.MoveCall ? [`${c.MoveCall.module}::${c.MoveCall.function}`] : [],
+    )
+}
+
+describe('enum arguments are built on-chain, not passed as pure', () => {
+  it('grantTx constructs the role and principal with Move calls', () => {
+    expect(moveCalls(grantTx(PKG, ACL, OU, 'Read', playerPrincipal))).toEqual([
+      'keyspace::role_read',
+      'acl::player',
+      'keyspace::grant',
+    ])
+  })
+
+  it('revokeTx builds a machine principal with acl::machine', () => {
+    expect(
+      moveCalls(revokeTx(PKG, ACL, OU, 'Write', machinePrincipal)),
+    ).toEqual(['keyspace::role_write', 'acl::machine', 'keyspace::revoke'])
+  })
+
+  it('grantTx builds an ou principal with acl::ou', () => {
+    expect(moveCalls(grantTx(PKG, ACL, OU, 'Grant', ouPrincipal))).toEqual([
+      'keyspace::role_grant',
+      'acl::ou',
+      'keyspace::grant',
+    ])
+  })
+
+  it('no transaction input is a pure-encoded enum', () => {
+    const tx = grantTx(PKG, ACL, OU, 'Read', machinePrincipal)
+    // Only the machine address is pure; the keyspace and OU are objects.
+    expect(tx.getData().inputs.filter((i) => i.Pure)).toHaveLength(1)
+  })
+
+  it('createKeyspaceForOuTx targets create_keyspace_for_ou', () => {
+    const calls = moveCalls(
+      createKeyspaceForOuTx(PKG, OU, 'ks', [machinePrincipal], [], []),
+    )
+    expect(calls).toContain('keyspace::create_keyspace_for_ou')
+    expect(calls).toContain('acl::machine')
   })
 })
 

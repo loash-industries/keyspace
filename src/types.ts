@@ -5,6 +5,8 @@ import type { Transaction } from '@mysten/sui/transactions'
 
 export type Principal =
   | { type: 'player'; address: string }
+  /** A service or bot key (not an on-chain Player), satisfied by address like `player`. */
+  | { type: 'machine'; address: string }
   | { type: 'ou'; ouId: string }
 
 /** @deprecated Use Principal */
