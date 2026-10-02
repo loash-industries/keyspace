@@ -1,3 +1,7 @@
+## 9.1.0 (2026-10-02)
+
+* feat(locations): allow spaces and punctuation in transponder codes, cap at 64 (#21) ([cd1db56](https://github.com/loash-industries/keyspace/commit/cd1db56)), closes [#21](https://github.com/loash-industries/keyspace/issues/21)
+
 ## <small>9.0.1 (2026-09-30)</small>
 
 * fix: point DEFAULT_PACKAGE_ID at cycle-7 armature_vault ([46a7410](https://github.com/loash-industries/keyspace/commit/46a7410))
