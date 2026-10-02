@@ -414,7 +414,7 @@ describe('validateLocation', () => {
     ).not.toThrow()
   })
 
-  it('accepts transponder_code exactly at the 32-character limit', () => {
+  it('accepts transponder_code exactly at the 64-character limit', () => {
     expect(() =>
       validateLocation({
         ...validLocation,
@@ -424,7 +424,7 @@ describe('validateLocation', () => {
     ).not.toThrow()
   })
 
-  it('throws ValidationFailed when transponder_code exceeds 32 characters', () => {
+  it('throws ValidationFailed when transponder_code exceeds 64 characters', () => {
     expect(() =>
       validateLocation({
         ...validLocation,
@@ -434,8 +434,53 @@ describe('validateLocation', () => {
     ).toThrow(expect.objectContaining({ code: AclError.ValidationFailed }))
   })
 
-  it('throws ValidationFailed when transponder_code contains non-alphanumerics', () => {
-    for (const transponder_code of ['TX-42', 'has space', 'p@ss', '']) {
+  it('accepts transponder_code with spaces, underscores, dashes, and punctuation', () => {
+    for (const transponder_code of [
+      'TX-42',
+      'has space',
+      'snake_case_code',
+      'p@ss!#$%&*()+=.,:;?~',
+      'A',
+    ]) {
+      expect(() =>
+        validateLocation({
+          ...validLocation,
+          transponder_setting: 'transponder_code',
+          transponder_code,
+        }),
+      ).not.toThrow()
+    }
+  })
+
+  it('trims leading and trailing whitespace from transponder_code', () => {
+    const parsed = validateLocation({
+      ...validLocation,
+      transponder_setting: 'transponder_code',
+      transponder_code: '  Welcome to Metropolis \t',
+    })
+    expect((parsed as any).transponder_code).toBe('Welcome to Metropolis')
+  })
+
+  it('applies the length cap after trimming', () => {
+    const parsed = validateLocation({
+      ...validLocation,
+      transponder_setting: 'transponder_code',
+      transponder_code: ` ${'a'.repeat(TRANSPONDER_CODE_MAX_LENGTH)} `,
+    })
+    expect((parsed as any).transponder_code).toBe(
+      'a'.repeat(TRANSPONDER_CODE_MAX_LENGTH),
+    )
+  })
+
+  it('throws ValidationFailed when transponder_code is empty, blank, or non-printable', () => {
+    for (const transponder_code of [
+      '',
+      ' ',
+      ' \t ',
+      'tab\there',
+      'line\nbreak',
+      'café',
+    ]) {
       expect(() =>
         validateLocation({
           ...validLocation,
@@ -596,6 +641,19 @@ describe('LocationSchemaV3', () => {
       transponder_code: 'Zulu99',
     })
     expect(result.success).toBe(true)
+  })
+
+  it('keeps the original 32-character transponder_code cap', () => {
+    const result = LocationSchemaV3.safeParse({
+      id: 'x',
+      solar_system: 'Sol',
+      structure_type: 'gate',
+      warp_in: 'P1L0',
+      description: 'test',
+      transponder_setting: 'transponder_code',
+      transponder_code: 'a'.repeat(33),
+    })
+    expect(result.success).toBe(false)
   })
 
   it('rejects setting "transponder_code" without a code', () => {
@@ -780,6 +838,14 @@ describe('TransponderFieldsSchemaV5', () => {
     const result = TransponderFieldsSchemaV5.safeParse({
       transponder_setting: 'transponder_code',
       transponder_code: 'Zulu99',
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('accepts "transponder_code" with a code containing spaces and symbols', () => {
+    const result = TransponderFieldsSchemaV5.safeParse({
+      transponder_setting: 'transponder_code',
+      transponder_code: 'Zulu 99_alpha-bravo',
     })
     expect(result.success).toBe(true)
   })
