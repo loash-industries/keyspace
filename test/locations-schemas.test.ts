@@ -452,12 +452,31 @@ describe('validateLocation', () => {
     }
   })
 
-  it('throws ValidationFailed when transponder_code is empty, padded, or non-printable', () => {
+  it('trims leading and trailing whitespace from transponder_code', () => {
+    const parsed = validateLocation({
+      ...validLocation,
+      transponder_setting: 'transponder_code',
+      transponder_code: '  Welcome to Metropolis \t',
+    })
+    expect((parsed as any).transponder_code).toBe('Welcome to Metropolis')
+  })
+
+  it('applies the length cap after trimming', () => {
+    const parsed = validateLocation({
+      ...validLocation,
+      transponder_setting: 'transponder_code',
+      transponder_code: ` ${'a'.repeat(TRANSPONDER_CODE_MAX_LENGTH)} `,
+    })
+    expect((parsed as any).transponder_code).toBe(
+      'a'.repeat(TRANSPONDER_CODE_MAX_LENGTH),
+    )
+  })
+
+  it('throws ValidationFailed when transponder_code is empty, blank, or non-printable', () => {
     for (const transponder_code of [
       '',
       ' ',
-      ' leading',
-      'trailing ',
+      ' \t ',
       'tab\there',
       'line\nbreak',
       'café',

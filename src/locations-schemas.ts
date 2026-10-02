@@ -14,7 +14,8 @@ const TRANSPONDER_CODE_MAX_LENGTH_V3 = 32
 /**
  * Printable ASCII (letters, digits, spaces, punctuation such as `_` and `-`),
  * with no leading or trailing space. Length is capped separately by
- * TRANSPONDER_CODE_MAX_LENGTH.
+ * TRANSPONDER_CODE_MAX_LENGTH. The v5 schema trims before testing, so test
+ * trimmed input against this when validating client-side.
  */
 export const TRANSPONDER_CODE_PATTERN = /^[!-~](?:[ -~]*[!-~])?$/
 
@@ -187,15 +188,18 @@ export const TransponderFieldsSchemaV5 = z.discriminatedUnion(
     z.object({ transponder_setting: z.literal('tribe') }),
     z.object({
       transponder_setting: z.literal('transponder_code'),
+      // trim() must come first: zod 4 runs checks in order, so the length and
+      // pattern checks then see (and the parse returns) the trimmed code.
       transponder_code: z
         .string()
+        .trim()
         .max(
           TRANSPONDER_CODE_MAX_LENGTH,
           `transponder_code must be ≤ ${TRANSPONDER_CODE_MAX_LENGTH} characters`,
         )
         .regex(
           TRANSPONDER_CODE_PATTERN,
-          'transponder_code must be printable ASCII with no leading or trailing spaces',
+          'transponder_code must be non-empty printable ASCII',
         ),
     }),
   ],
