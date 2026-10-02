@@ -6,7 +6,17 @@ import { AclClientError, AclError } from './errors'
 export const LOCATIONS_SCHEMA_NAME = 'triex.locations' as const
 export const LOCATIONS_SCHEMA_VERSION = 5 as const
 export const WARP_IN_MAX_LENGTH = 32 as const
-export const TRANSPONDER_CODE_MAX_LENGTH = 32 as const
+export const TRANSPONDER_CODE_MAX_LENGTH = 64 as const
+// v3/v4 capped transponder_code at 32; kept so those migration-input schemas
+// stay exactly as they were written.
+const TRANSPONDER_CODE_MAX_LENGTH_V3 = 32
+
+/**
+ * Printable ASCII (letters, digits, spaces, punctuation such as `_` and `-`),
+ * with no leading or trailing space. Length is capped separately by
+ * TRANSPONDER_CODE_MAX_LENGTH.
+ */
+export const TRANSPONDER_CODE_PATTERN = /^[!-~](?:[ -~]*[!-~])?$/
 
 /** Placeholder destination backfilled onto pre-v5 catapult locations during migration. */
 export const DESTINATION_UNKNOWN = 'UNKNOWN' as const
@@ -65,8 +75,8 @@ export const LocationSchemaV3 = LocationSchemaV2.extend({
   transponder_code: z
     .string()
     .max(
-      TRANSPONDER_CODE_MAX_LENGTH,
-      `transponder_code must be ≤ ${TRANSPONDER_CODE_MAX_LENGTH} characters`,
+      TRANSPONDER_CODE_MAX_LENGTH_V3,
+      `transponder_code must be ≤ ${TRANSPONDER_CODE_MAX_LENGTH_V3} characters`,
     )
     .regex(
       /^[A-Za-z0-9]+$/,
@@ -98,8 +108,8 @@ export const LocationSchemaV4 = LocationSchemaV2.extend({
   transponder_code: z
     .string()
     .max(
-      TRANSPONDER_CODE_MAX_LENGTH,
-      `transponder_code must be ≤ ${TRANSPONDER_CODE_MAX_LENGTH} characters`,
+      TRANSPONDER_CODE_MAX_LENGTH_V3,
+      `transponder_code must be ≤ ${TRANSPONDER_CODE_MAX_LENGTH_V3} characters`,
     )
     .regex(
       /^[A-Za-z0-9]+$/,
@@ -138,7 +148,10 @@ export const DocumentSchemaV4 = z.object({
 // transponder_setting: 'public' | 'tribe' | 'transponder_code' | 'none'.
 //   'none' replaces v4's "field omitted" convention with an explicit state
 //   so the type checker can discriminate on it; transponder_code is only
-//   valid (and required) alongside 'transponder_code'.
+//   valid (and required) alongside 'transponder_code'. transponder_code
+//   accepts any TRANSPONDER_CODE_PATTERN string up to 64 chars — v3/v4 were
+//   alphanumeric and ≤ 32, so this is a pure relaxation and needs no version
+//   bump.
 
 const LocationBaseFieldsV5 = {
   id: z.string(),
@@ -181,8 +194,8 @@ export const TransponderFieldsSchemaV5 = z.discriminatedUnion(
           `transponder_code must be ≤ ${TRANSPONDER_CODE_MAX_LENGTH} characters`,
         )
         .regex(
-          /^[A-Za-z0-9]+$/,
-          'transponder_code must contain only letters and numbers',
+          TRANSPONDER_CODE_PATTERN,
+          'transponder_code must be printable ASCII with no leading or trailing spaces',
         ),
     }),
   ],
