@@ -184,10 +184,10 @@ const text = new TextDecoder().decode(bytes);
 
 Seal session keys are cached in memory for 10 minutes — the wallet prompt appears at most once per TTL window.
 
-### Edit data (same epoch, new content)
+### Edit data (new content)
 
 ```ts
-await aclClient.editData({
+const { rotated } = await aclClient.editData({
   aclId,
   entryId,
   newPlaintext: 'Updated coordinates',
@@ -195,6 +195,13 @@ await aclClient.editData({
   signPersonalMessage,
 });
 ```
+
+Every edit re-encrypts under a fresh Seal identity, so the new content is
+readable by the *current* Read set. If the entry was stale (the Read set
+changed since it was last written), the edit is submitted as `update_entry`
+rather than `edit_entry`, so the same transaction also brings the entry up to
+the current epoch — `rotated` is `true` in that case. An entry edited this way
+no longer shows up in `getStaleEntries()`.
 
 ### Rotate stale entries after a membership change
 

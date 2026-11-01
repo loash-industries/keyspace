@@ -221,6 +221,11 @@ export class LocationsClient {
    * on-chain, so a single bad edit rejects the entire call and the stored
    * document is never left half-applied. Passing no edits throws
    * ACL_VALIDATION_FAILED rather than issuing an empty write.
+   *
+   * If the entry is stale (Read membership changed since the last write), the
+   * write runs as `update_entry`, so the batch also advances the document to
+   * the current keyspace epoch — see `AclClient.editData`. The returned
+   * `WriteResult.rotated` reports whether that happened.
    */
   async applyEdits(edits: LocationsBatchEdits): Promise<WriteResult> {
     const removeIds = edits.remove ?? []
