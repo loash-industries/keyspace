@@ -754,13 +754,27 @@ describe('readData', () => {
 
 // ── editData ──────────────────────────────────────────────────────────────────
 
+// Move calls submitted through the executor, as `module::function`.
+function executedMoveCalls(executor: any): string[] {
+  return executor.mock.calls.flatMap(([tx]: [any]) =>
+    tx
+      .getData()
+      .commands.flatMap((c: any) =>
+        c.MoveCall ? [`${c.MoveCall.module}::${c.MoveCall.function}`] : [],
+      ),
+  )
+}
+
 describe('editData', () => {
   const signPersonalMessage = (jest.fn() as any).mockResolvedValue('sig')
 
-  it('re-encrypts, uploads, and edits the entry', async () => {
+  it('re-encrypts, uploads, and edits a current entry in place (edit_entry)', async () => {
     const executor = makeExecutor()
     const storageAdapter = makeStorageAdapter()
     mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 3 }))
+    mockFetchEncryptedEntry.mockResolvedValue(
+      makeEntry({ epoch: 3, isStale: false }),
+    )
     mockSealEncrypt.mockResolvedValue(ENCRYPTED)
 
     const client = makeClient({ executor, storageAdapter })
@@ -772,6 +786,11 @@ describe('editData', () => {
       signPersonalMessage,
     })
 
+    expect(mockFetchEncryptedEntry).toHaveBeenCalledWith(
+      expect.anything(),
+      ENTRY_ID,
+      3,
+    )
     expect(mockSealEncrypt).toHaveBeenCalledWith(
       expect.anything(),
       PKG,
@@ -780,11 +799,70 @@ describe('editData', () => {
     )
     expect(storageAdapter.upload).toHaveBeenCalledWith(ENCRYPTED)
     expect(executor).toHaveBeenCalledTimes(1)
+    expect(executedMoveCalls(executor)).toEqual(['keyspace::edit_entry'])
     expect(result).toEqual({
       entryId: ENTRY_ID,
       uri: `ipfs://${CID}`,
       epoch: 3,
+      updated: true,
+      rotated: false,
     })
+  })
+
+  it('upgrades a stale entry to the current epoch in the same write (update_entry)', async () => {
+    const executor = makeExecutor()
+    const storageAdapter = makeStorageAdapter()
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 3 }))
+    mockFetchEncryptedEntry.mockResolvedValue(
+      makeEntry({ epoch: 1, isStale: true }),
+    )
+    mockSealEncrypt.mockResolvedValue(ENCRYPTED)
+
+    const client = makeClient({ executor, storageAdapter })
+    const result = await client.editData({
+      aclId: ACL_ID,
+      entryId: ENTRY_ID,
+      newPlaintext: PLAINTEXT,
+      walletAddress: OWNER,
+      signPersonalMessage,
+    })
+
+    // Still exactly one upload and one transaction — the epoch upgrade rides
+    // along with the content write instead of needing a separate rotation.
+    expect(storageAdapter.upload).toHaveBeenCalledTimes(1)
+    expect(executor).toHaveBeenCalledTimes(1)
+    expect(executedMoveCalls(executor)).toEqual(['keyspace::update_entry'])
+    // No extra decrypt: the caller already supplies the plaintext.
+    expect(mockSealDecrypt).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      entryId: ENTRY_ID,
+      uri: `ipfs://${CID}`,
+      epoch: 3,
+      updated: true,
+      rotated: true,
+    })
+  })
+
+  it('throws AclClientError(EntryNotFound) before encrypting or uploading when the entry does not exist', async () => {
+    const executor = makeExecutor()
+    const storageAdapter = makeStorageAdapter()
+    mockFetchKeyspaceMeta.mockResolvedValue(makeAclMeta({ epoch: 3 }))
+    mockFetchEncryptedEntry.mockResolvedValue(null)
+
+    const client = makeClient({ executor, storageAdapter })
+    await expect(
+      client.editData({
+        aclId: ACL_ID,
+        entryId: ENTRY_ID,
+        newPlaintext: PLAINTEXT,
+        walletAddress: OWNER,
+        signPersonalMessage,
+      }),
+    ).rejects.toMatchObject({ code: AclError.EntryNotFound })
+
+    expect(mockSealEncrypt).not.toHaveBeenCalled()
+    expect(storageAdapter.upload).not.toHaveBeenCalled()
+    expect(executor).not.toHaveBeenCalled()
   })
 })
 

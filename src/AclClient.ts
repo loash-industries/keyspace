@@ -406,6 +406,25 @@ export class AclClient {
     })
   }
 
+  /**
+   * Replace an entry's content: re-encrypt `newPlaintext`, upload it, and
+   * point the on-chain entry at the new blob.
+   *
+   * The ciphertext is sealed under a fresh Seal identity on every write, so
+   * whoever holds Read *now* can decrypt it. If the entry is **stale** (its
+   * epoch is behind the keyspace version because the Read set changed since it
+   * was last written) this call submits `keyspace::update_entry` instead of
+   * `keyspace::edit_entry`, so the same single transaction also advances the
+   * entry to the current epoch. Without that, an edit would leave the entry
+   * permanently flagged stale even though its content is already sealed to
+   * the current readers — and a later rotation would redo the work. The
+   * result's `updated` flag confirms the content write; `rotated` reports
+   * whether the epoch upgrade rode along with it.
+   *
+   * Race: if another writer rotates the entry between our staleness check and
+   * our transaction landing, `update_entry` aborts with EAlreadyCurrentEpoch
+   * (code 3); retrying the edit then takes the `edit_entry` path.
+   */
   async editData(opts: {
     aclId: string
     entryId: string
@@ -416,6 +435,17 @@ export class AclClient {
   }): Promise<WriteResult> {
     const ouId = this.requireOuId(opts.ouId)
     const meta = await this.getAclMeta(opts.aclId)
+    const entry = await fetchEncryptedEntry(
+      this.suiClient,
+      opts.entryId,
+      meta.epoch,
+    )
+    if (!entry) {
+      throw new AclClientError(
+        AclError.EntryNotFound,
+        `Entry not found: ${opts.entryId}`,
+      )
+    }
 
     const data =
       typeof opts.newPlaintext === 'string'
@@ -431,10 +461,21 @@ export class AclClient {
 
     const uri = await this.requireStorageAdapter().upload(encrypted)
 
-    const tx = editEntryTx(this.packageId, opts.aclId, opts.entryId, ouId, uri)
+    // A stale entry takes update_entry so the write also bumps its epoch to
+    // the keyspace version; a current one must take edit_entry, because
+    // update_entry aborts (EAlreadyCurrentEpoch) when nothing needs rotating.
+    const tx = entry.isStale
+      ? updateEntryTx(this.packageId, opts.aclId, opts.entryId, ouId, uri)
+      : editEntryTx(this.packageId, opts.aclId, opts.entryId, ouId, uri)
     await this.requireExecutor()(tx)
 
-    return { entryId: opts.entryId, uri, epoch: meta.epoch }
+    return {
+      entryId: opts.entryId,
+      uri,
+      epoch: meta.epoch,
+      updated: true,
+      rotated: entry.isStale,
+    }
   }
 
   async rotateEntry(opts: {
