@@ -1,3 +1,11 @@
+## 9.2.0 (2026-11-01)
+
+* ci: publish to npm with trusted publishing (OIDC) instead of a token (#23) ([f5bd9ef](https://github.com/loash-industries/keyspace/commit/f5bd9ef)), closes [#23](https://github.com/loash-industries/keyspace/issues/23) [#22](https://github.com/loash-industries/keyspace/issues/22)
+* ci: stage npm releases for 2FA approval instead of publishing them ([819dfb7](https://github.com/loash-industries/keyspace/commit/819dfb7))
+* chore: revert the 9.2.0 release commit, which never reached npm ([2c8747e](https://github.com/loash-industries/keyspace/commit/2c8747e))
+* chore(release): 9.2.0 [skip ci] ([0aac210](https://github.com/loash-industries/keyspace/commit/0aac210))
+* feat(AclClient): upgrade a stale entry to the current epoch on editData (#22) ([860db78](https://github.com/loash-industries/keyspace/commit/860db78)), closes [#22](https://github.com/loash-industries/keyspace/issues/22)
+
 ## 9.1.0 (2026-10-02)
 
 * feat(locations): allow spaces and punctuation in transponder codes, cap at 64 (#21) ([cd1db56](https://github.com/loash-industries/keyspace/commit/cd1db56)), closes [#21](https://github.com/loash-industries/keyspace/issues/21)
