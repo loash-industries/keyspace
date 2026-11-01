@@ -187,13 +187,15 @@ Seal session keys are cached in memory for 10 minutes — the wallet prompt appe
 ### Edit data (new content)
 
 ```ts
-const { rotated } = await aclClient.editData({
+const { updated, rotated } = await aclClient.editData({
   aclId,
   entryId,
   newPlaintext: 'Updated coordinates',
   walletAddress: myAddress,
   signPersonalMessage,
 });
+// updated → true: the entry now points at the new content
+// rotated → true only if the entry was stale and got bumped to the current epoch
 ```
 
 Every edit re-encrypts under a fresh Seal identity, so the new content is

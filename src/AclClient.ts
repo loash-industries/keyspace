@@ -418,7 +418,8 @@ export class AclClient {
    * entry to the current epoch. Without that, an edit would leave the entry
    * permanently flagged stale even though its content is already sealed to
    * the current readers — and a later rotation would redo the work. The
-   * result's `rotated` flag reports which path ran.
+   * result's `updated` flag confirms the content write; `rotated` reports
+   * whether the epoch upgrade rode along with it.
    *
    * Race: if another writer rotates the entry between our staleness check and
    * our transaction landing, `update_entry` aborts with EAlreadyCurrentEpoch
@@ -472,6 +473,7 @@ export class AclClient {
       entryId: opts.entryId,
       uri,
       epoch: meta.epoch,
+      updated: true,
       rotated: entry.isStale,
     }
   }

@@ -804,6 +804,7 @@ describe('editData', () => {
       entryId: ENTRY_ID,
       uri: `ipfs://${CID}`,
       epoch: 3,
+      updated: true,
       rotated: false,
     })
   })
@@ -837,6 +838,7 @@ describe('editData', () => {
       entryId: ENTRY_ID,
       uri: `ipfs://${CID}`,
       epoch: 3,
+      updated: true,
       rotated: true,
     })
   })

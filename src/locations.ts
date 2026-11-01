@@ -225,7 +225,8 @@ export class LocationsClient {
    * If the entry is stale (Read membership changed since the last write), the
    * write runs as `update_entry`, so the batch also advances the document to
    * the current keyspace epoch — see `AclClient.editData`. The returned
-   * `WriteResult.rotated` reports whether that happened.
+   * `WriteResult` carries `updated: true` for the content write and `rotated`
+   * for whether that epoch upgrade happened.
    */
   async applyEdits(edits: LocationsBatchEdits): Promise<WriteResult> {
     const removeIds = edits.remove ?? []

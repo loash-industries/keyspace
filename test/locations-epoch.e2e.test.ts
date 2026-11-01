@@ -564,6 +564,7 @@ describe('adding a location to a stale list', () => {
       entryId,
       uri: 'mem://blob-1',
       epoch: 2,
+      updated: true,
       rotated: true,
     })
 

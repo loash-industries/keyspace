@@ -88,6 +88,12 @@ export interface WriteResult {
   /** Keyspace epoch at the time of the write. */
   epoch: number
   /**
+   * Set by `editData`: true once the entry's content has been replaced and the
+   * on-chain entry points at the new `uri`. Absent on `writeData`, which
+   * creates a new entry rather than updating one.
+   */
+  updated?: boolean
+  /**
    * Set by `editData`: true when the entry was stale and the write ran as
    * `update_entry`, advancing the entry to `epoch`; false when it ran as a
    * same-epoch `edit_entry`. Absent on `writeData` (a new entry is always
