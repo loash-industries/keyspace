@@ -35,5 +35,9 @@ jobs:
       # publisher on npmjs.com names this file (publish.yml) and environment
       # prd, and `id-token: write` above is what lets the release job request it.
       npm_trusted_publishing: true
+      # Each release is staged on npm and goes live only once a maintainer
+      # runs `npm stage approve <id>` (2FA). The trusted publisher grants
+      # "npm stage publish" only, and .releaserc sets npmPublish: false.
+      npm_staged_publishing: true
     secrets:
       GH_AUTH_TOKEN: ${{ secrets.GH_AUTH_TOKEN }}
