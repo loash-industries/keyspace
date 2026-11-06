@@ -3,11 +3,9 @@ name: Publish
 # description: Validate, release and publish to npm via semantic-release
 permissions:
   id-token: write
-  contents: write
+  contents: read
   actions: read
   checks: write
-  issues: write
-  pull-requests: write
 
 on:
   push:
@@ -17,14 +15,19 @@ on:
 jobs:
   validate-code:
     if: github.actor != 'github-actions[bot]'
-    uses: loash-industries/public-workflows/.github/workflows/js-validate-code.yml@v0.1.0
+    uses: loash-industries/public-workflows/.github/workflows/js-validate-code.yml@7f3d345e01a92525698a5d6148497fa0e8e133e9 # v0.3.0
     with:
       node_version: 22
       npm_client: yarn
       npm_client_production_flag: --frozen-lockfile
 
   release:
-    uses: loash-industries/public-workflows/.github/workflows/js-semantic-release.yml@main
+    uses: loash-industries/public-workflows/.github/workflows/js-semantic-release.yml@7f3d345e01a92525698a5d6148497fa0e8e133e9 # v0.3.0
+    permissions:  # tag + GitHub Release + npm, with the job's own token (DEVOPS-22)
+      contents: write
+      issues: write
+      pull-requests: write
+      id-token: write
     needs: [ validate-code ]
     with:
       node_version: "22"
@@ -39,5 +42,3 @@ jobs:
       # runs `npm stage approve <id>` (2FA). The trusted publisher grants
       # "npm stage publish" only, and .releaserc sets npmPublish: false.
       npm_staged_publishing: true
-    secrets:
-      GH_AUTH_TOKEN: ${{ secrets.GH_AUTH_TOKEN }}
