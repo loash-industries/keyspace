@@ -1,3 +1,4 @@
+import { unauthorizedHint, type KeyspaceGateway } from './gateways'
 import type { AclDetail, AclMeta, EntryMeta, Principal } from './types'
 import { AclClientError, AclError } from './errors'
 
@@ -297,15 +298,20 @@ export async function fetchAccessibleKeyspaces(
   indexerUrl: string,
   address: string,
   apiKey: string,
+  gateway?: KeyspaceGateway,
 ): Promise<string[]> {
   const res = await fetch(
     `${indexerUrl}/v1/players/${address}/accessible-keyspaces`,
     { headers: { 'x-api-key': apiKey } },
   )
   if (!res.ok) {
+    const hint =
+      gateway && (res.status === 401 || res.status === 403)
+        ? ` ${unauthorizedHint(gateway, apiKey)}`
+        : ''
     throw new AclClientError(
       AclError.UnexpectedResponse,
-      `Indexer error (${res.status}): ${res.statusText}`,
+      `Indexer error (${res.status}): ${res.statusText}.${hint}`,
     )
   }
   const keyspaces = (await res.json()) as AccessibleKeyspace[]

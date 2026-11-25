@@ -6,7 +6,7 @@ export {
 } from './AclClient'
 export type { PublicAclClient, ReadOnlyAclClientConfig } from './AclClient'
 export { AclError, AclClientError } from './errors'
-export { GATEWAY_URLS } from './gateways'
+export { DEFAULT_GATEWAY, GATEWAY_URLS, resolveGateway } from './gateways'
 export type { KeyspaceGateway } from './gateways'
 // KeyspaceRole is a runtime const *and* a type — export the value so callers
 // can reference `KeyspaceRole.Read`; the type is re-exported alongside it.

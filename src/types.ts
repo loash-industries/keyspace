@@ -186,8 +186,10 @@ export interface AclClientConfig {
    */
   ouId?: string
   /**
-   * API gateway for getAccessibleAcls. Defaults to `triex`. The `apiKey` must
-   * belong to it: keys are not shared between gateways.
+   * API gateway for getAccessibleAcls. Defaults to `voidwire` (a Voidwire key,
+   * `sk_vw_…`); pass `triex` for a Trinary Exchange key. The `apiKey` must
+   * belong to it: keys are not shared between gateways. Without a `gateway`,
+   * an `indexerUrl` of `https://api.trinary.exchange` selects `triex`.
    */
   gateway?: KeyspaceGateway
   /**

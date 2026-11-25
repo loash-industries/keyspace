@@ -57,23 +57,25 @@ const aclClient = new AclClient({
   }),
 
   // Optional: REST indexer host for getAccessibleAcls(). Defaults to the
-  // gateway's (https://api.trinary.exchange).
+  // gateway's (https://api.voidwire.xyz).
   indexerUrl: INDEXER_URL,
 
   // Required: API key, sent as the `x-api-key` header on indexer requests. See
   // https://docs.trinary.exchange/docs/api-keys to create one.
-  apiKey: TRINARY_API_KEY,
+  apiKey: VOIDWIRE_API_KEY,
 });
 ```
 
-To read `getAccessibleAcls()` through [Voidwire](https://voidwire.xyz) instead,
-pass `gateway: 'voidwire'` and a Voidwire key (`sk_vw_…`). Keys are not shared
-between the two gateways. `ReadOnlyAclClient` takes the same option.
+Since 10.0, `getAccessibleAcls()` reads through [Voidwire](https://voidwire.xyz)
+by default, with a Voidwire key (`sk_vw_…`). To keep using a Trinary Exchange
+key, pass `gateway: 'triex'`. Keys are not shared between the two gateways.
+Without a `gateway`, an `indexerUrl` of `https://api.trinary.exchange` also
+selects `triex`. `ReadOnlyAclClient` takes the same option.
 
 ### Client-side (browser) apps: use `createPublicAclClient`, not `AclClient`
 
-`apiKey` above is a secret — it authenticates requests to the Trinary
-Exchange indexer and must never ship to a browser. If you're wiring up
+`apiKey` above is a secret — it authenticates requests to the indexer
+(Voidwire by default) and must never ship to a browser. If you're wiring up
 `AclClient` in a dapp-kit / frontend context (wallet-connected reads,
 grants, writes), construct it with `createPublicAclClient` instead of
 `new AclClient(...)`:
@@ -245,7 +247,7 @@ const acl = await aclClient.getAcl(aclId);
 const caps = await aclClient.getOwnedAcls(myAddress);
 // AdminCap[] — ACLs this wallet can manage
 
-// Queries the indexer (defaults to https://api.trinary.exchange). Requires the
+// Queries the indexer (defaults to Voidwire, https://api.voidwire.xyz). Requires the
 // apiKey in config — see https://docs.trinary.exchange/docs/api-keys. Server-side
 // only: a client built with createPublicAclClient doesn't expose this method —
 // see "Client-side (browser) apps" above.

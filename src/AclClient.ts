@@ -30,7 +30,11 @@ import {
   fetchKeyspaceDetail,
   fetchKeyspaceMeta,
 } from './queries'
-import { resolveIndexerUrl, type KeyspaceGateway } from './gateways'
+import {
+  resolveGateway,
+  resolveIndexerUrl,
+  type KeyspaceGateway,
+} from './gateways'
 import { sealDecrypt, sealEncrypt } from './seal_helpers'
 import { downloadBlob, DEFAULT_IPFS_GATEWAY } from './storage'
 
@@ -52,6 +56,7 @@ export class AclClient {
   private readonly storageAdapter: AclClientConfig['storageAdapter']
   private readonly defaultOuId?: string
   private readonly indexerUrl: string
+  private readonly gateway: KeyspaceGateway
   private readonly apiKey: string
   private readonly sessionKeyTtlMin: number
   private readonly ipfsGateway: string
@@ -64,7 +69,8 @@ export class AclClient {
     this.executor = config.executor
     this.storageAdapter = config.storageAdapter
     this.defaultOuId = config.ouId
-    this.indexerUrl = resolveIndexerUrl(config.gateway, config.indexerUrl)
+    this.gateway = resolveGateway(config.gateway, config.indexerUrl)
+    this.indexerUrl = resolveIndexerUrl(this.gateway, config.indexerUrl)
     this.apiKey = config.apiKey
     this.sessionKeyTtlMin = config.sessionKeyTtlMin ?? 10
     this.ipfsGateway = config.ipfsGateway ?? DEFAULT_IPFS_GATEWAY
@@ -229,7 +235,12 @@ export class AclClient {
         'getAccessibleAcls requires an indexerUrl in AclClient config',
       )
     }
-    return fetchAccessibleKeyspaces(this.indexerUrl, address, this.apiKey)
+    return fetchAccessibleKeyspaces(
+      this.indexerUrl,
+      address,
+      this.apiKey,
+      this.gateway,
+    )
   }
 
   // ── Role management ─────────────────────────────────────────────────────────
@@ -656,7 +667,11 @@ export function createPublicAclClient(
 export interface ReadOnlyAclClientConfig {
   /** @mysten/sui SuiClient instance */
   suiClient: AclClientConfig['suiClient']
-  /** API gateway for getAccessibleAcls. Defaults to `triex`. */
+  /**
+   * API gateway for getAccessibleAcls. Defaults to `voidwire`; pass `triex`
+   * for a Trinary Exchange key. Without a `gateway`, an `indexerUrl` of
+   * `https://api.trinary.exchange` selects `triex`.
+   */
   gateway?: KeyspaceGateway
   /**
    * REST indexer URL for getAccessibleAcls. Defaults to the `gateway`'s.
@@ -680,11 +695,13 @@ export interface ReadOnlyAclClientConfig {
 export class ReadOnlyAclClient {
   private readonly suiClient: AclClientConfig['suiClient']
   private readonly indexerUrl: string
+  private readonly gateway: KeyspaceGateway
   private readonly apiKey?: string
 
   constructor(config: ReadOnlyAclClientConfig) {
     this.suiClient = config.suiClient
-    this.indexerUrl = resolveIndexerUrl(config.gateway, config.indexerUrl)
+    this.gateway = resolveGateway(config.gateway, config.indexerUrl)
+    this.indexerUrl = resolveIndexerUrl(this.gateway, config.indexerUrl)
     this.apiKey = config.apiKey
   }
 
@@ -700,7 +717,12 @@ export class ReadOnlyAclClient {
   }
 
   async getAccessibleAcls(address: string): Promise<string[]> {
-    return fetchAccessibleKeyspaces(this.indexerUrl, address, this.apiKey ?? '')
+    return fetchAccessibleKeyspaces(
+      this.indexerUrl,
+      address,
+      this.apiKey ?? '',
+      this.gateway,
+    )
   }
 
   /**
