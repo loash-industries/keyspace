@@ -30,11 +30,9 @@ import {
   fetchKeyspaceDetail,
   fetchKeyspaceMeta,
 } from './queries'
+import { resolveIndexerUrl, type KeyspaceGateway } from './gateways'
 import { sealDecrypt, sealEncrypt } from './seal_helpers'
 import { downloadBlob, DEFAULT_IPFS_GATEWAY } from './storage'
-
-/** Default indexer: the Trinary Exchange gateway. */
-const DEFAULT_INDEXER_URL = 'https://api.trinary.exchange'
 
 /**
  * Default armature_vault package id (testnet). This is the *original* (v1)
@@ -66,7 +64,7 @@ export class AclClient {
     this.executor = config.executor
     this.storageAdapter = config.storageAdapter
     this.defaultOuId = config.ouId
-    this.indexerUrl = config.indexerUrl ?? DEFAULT_INDEXER_URL
+    this.indexerUrl = resolveIndexerUrl(config.gateway, config.indexerUrl)
     this.apiKey = config.apiKey
     this.sessionKeyTtlMin = config.sessionKeyTtlMin ?? 10
     this.ipfsGateway = config.ipfsGateway ?? DEFAULT_IPFS_GATEWAY
@@ -658,14 +656,16 @@ export function createPublicAclClient(
 export interface ReadOnlyAclClientConfig {
   /** @mysten/sui SuiClient instance */
   suiClient: AclClientConfig['suiClient']
+  /** API gateway for getAccessibleAcls. Defaults to `triex`. */
+  gateway?: KeyspaceGateway
   /**
-   * REST indexer URL for getAccessibleAcls.
-   * Defaults to the Trinary Exchange gateway (`https://api.trinary.exchange`).
+   * REST indexer URL for getAccessibleAcls. Defaults to the `gateway`'s.
+   * Changes the host only; the path layout follows `gateway`.
    */
   indexerUrl?: string
   /**
-   * Trinary Exchange API key used to authenticate indexer requests. Sent as
-   * the `x-api-key` header. Omit if the indexer allows unauthenticated reads.
+   * API key for the configured `gateway`, used to authenticate indexer
+   * requests. Sent as the `x-api-key` header. Omit if the indexer allows unauthenticated reads.
    */
   apiKey?: string
 }
@@ -684,7 +684,7 @@ export class ReadOnlyAclClient {
 
   constructor(config: ReadOnlyAclClientConfig) {
     this.suiClient = config.suiClient
-    this.indexerUrl = config.indexerUrl ?? DEFAULT_INDEXER_URL
+    this.indexerUrl = resolveIndexerUrl(config.gateway, config.indexerUrl)
     this.apiKey = config.apiKey
   }
 

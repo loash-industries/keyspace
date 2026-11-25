@@ -56,16 +56,19 @@ const aclClient = new AclClient({
     gateway: 'https://your-gateway.mypinata.cloud',
   }),
 
-  // Optional: REST indexer for getAccessibleAcls().
-  // Defaults to the Trinary Exchange API (https://api.trinary.exchange).
+  // Optional: REST indexer host for getAccessibleAcls(). Defaults to the
+  // gateway's (https://api.trinary.exchange).
   indexerUrl: INDEXER_URL,
 
-  // Required: Trinary Exchange API key, sent as the `x-api-key` header on
-  // indexer requests. See https://docs.trinary.exchange/docs/api-keys to
-  // create one.
+  // Required: API key, sent as the `x-api-key` header on indexer requests. See
+  // https://docs.trinary.exchange/docs/api-keys to create one.
   apiKey: TRINARY_API_KEY,
 });
 ```
+
+To read `getAccessibleAcls()` through [Voidwire](https://voidwire.xyz) instead,
+pass `gateway: 'voidwire'` and a Voidwire key (`sk_vw_…`). Keys are not shared
+between the two gateways. `ReadOnlyAclClient` takes the same option.
 
 ### Client-side (browser) apps: use `createPublicAclClient`, not `AclClient`
 

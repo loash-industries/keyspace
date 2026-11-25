@@ -1,3 +1,4 @@
+import type { KeyspaceGateway } from './gateways'
 import type { Transaction } from '@mysten/sui/transactions'
 
 // ── Principal ─────────────────────────────────────────────────────────────────
@@ -185,8 +186,13 @@ export interface AclClientConfig {
    */
   ouId?: string
   /**
-   * REST indexer URL for getAccessibleAcls.
-   * Defaults to the Trinary Exchange gateway (`https://api.trinary.exchange`).
+   * API gateway for getAccessibleAcls. Defaults to `triex`. The `apiKey` must
+   * belong to it: keys are not shared between gateways.
+   */
+  gateway?: KeyspaceGateway
+  /**
+   * REST indexer URL for getAccessibleAcls. Defaults to the `gateway`'s.
+   * Changes the host only; the path layout follows `gateway`.
    */
   indexerUrl?: string
   /**
@@ -205,8 +211,8 @@ export interface AclClientConfig {
    */
   preferAdapterDownload?: boolean
   /**
-   * Trinary Exchange API key used to authenticate indexer requests. Sent as
-   * the `x-api-key` header.
+   * API key for the configured `gateway`, used to authenticate indexer
+   * requests. Sent as the `x-api-key` header.
    *
    * See https://docs.trinary.exchange/docs/api-keys for how to create one.
    *
