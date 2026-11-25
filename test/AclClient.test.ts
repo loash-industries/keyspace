@@ -174,7 +174,7 @@ describe('getAcl', () => {
 // ── getAccessibleAcls ─────────────────────────────────────────────────────────
 
 describe('getAccessibleAcls', () => {
-  it('defaults to the Trinary Exchange gateway when indexerUrl is not configured', async () => {
+  it('defaults to the Voidwire gateway when indexerUrl is not configured', async () => {
     mockFetchAccessibleKeyspaces.mockResolvedValue(['0xacl1'])
     const client = makeClient({ indexerUrl: undefined })
 
@@ -182,9 +182,10 @@ describe('getAccessibleAcls', () => {
 
     expect(result).toEqual(['0xacl1'])
     expect(mockFetchAccessibleKeyspaces).toHaveBeenCalledWith(
-      'https://api.trinary.exchange',
+      'https://api.voidwire.xyz/orgs',
       OWNER,
       'sk-test-key',
+      'voidwire',
     )
   })
 
@@ -197,7 +198,11 @@ describe('getAccessibleAcls', () => {
 
   it('delegates to fetchAccessibleKeyspaces with the configured indexerUrl and apiKey', async () => {
     mockFetchAccessibleKeyspaces.mockResolvedValue(['0xacl1', '0xacl2'])
-    const client = makeClient({ indexerUrl: INDEXER, apiKey: 'sk-test-key' })
+    const client = makeClient({
+      indexerUrl: INDEXER,
+      apiKey: 'sk-test-key',
+      gateway: 'triex',
+    })
 
     const result = await client.getAccessibleAcls(OWNER)
 
@@ -206,6 +211,7 @@ describe('getAccessibleAcls', () => {
       INDEXER,
       OWNER,
       'sk-test-key',
+      'triex',
     )
   })
 })
@@ -256,9 +262,10 @@ describe('createPublicAclClient', () => {
     await (client as InstanceType<typeof AclClient>).getAccessibleAcls(OWNER)
 
     expect(mockFetchAccessibleKeyspaces).toHaveBeenCalledWith(
-      INDEXER,
+      `${INDEXER}/orgs`,
       OWNER,
       '',
+      'voidwire',
     )
   })
 })
